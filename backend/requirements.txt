@@ -1,0 +1,8 @@
+Django==6.0.6
+django-cors-headers==4.9.0
+django-environ==0.14.0
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+paramiko==3.5.1
+PyMySQL==1.1.1
+requests==2.34.2
