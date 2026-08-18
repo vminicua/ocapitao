@@ -84,7 +84,21 @@ class UserSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["display_name", "created_at", "updated_at"]
+        read_only_fields = ["display_name", "is_superuser", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if self.instance and self.instance.is_superuser and not getattr(actor, "is_superuser", False):
+            raise serializers.ValidationError("Apenas um superutilizador pode alterar esta conta.")
+        if "is_staff" in attrs and attrs["is_staff"] != getattr(self.instance, "is_staff", False) and not getattr(actor, "is_superuser", False):
+            raise serializers.ValidationError({"is_staff": "Apenas um superutilizador pode alterar acesso administrativo."})
+        role = attrs.get("role")
+        if role and not getattr(actor, "is_superuser", False):
+            privileged = {"users.manage", "settings.manage"}
+            if role.permissions.filter(code__in=privileged).exists():
+                raise serializers.ValidationError({"role_id": "Apenas um superutilizador pode atribuir este perfil."})
+        return attrs
 
     def get_display_name(self, obj: User) -> str:
         return obj.get_full_name().strip() or obj.username or obj.email
@@ -205,3 +219,27 @@ class PinTokenObtainPairSerializer(serializers.Serializer):
             "refresh": str(refresh),
             "access": str(refresh.access_token),
         }
+
+
+class ChangePinSerializer(serializers.Serializer):
+    current_pin = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_pin = serializers.CharField(write_only=True, min_length=4, max_length=32, trim_whitespace=False)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if not attrs["new_pin"].isdigit():
+            raise serializers.ValidationError({"new_pin": "O PIN deve conter apenas números."})
+        if not user.check_password(attrs["current_pin"]):
+            raise serializers.ValidationError({"current_pin": "PIN atual incorreto."})
+        if attrs["new_pin"] in {"0000", "1111", "1122", "1234", "4321"}:
+            raise serializers.ValidationError({"new_pin": "Escolha um PIN menos previsível."})
+        if attrs["current_pin"] == attrs["new_pin"]:
+            raise serializers.ValidationError({"new_pin": "O novo PIN deve ser diferente do atual."})
+        return attrs
+
+    def save(self):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_pin"])
+        user.force_password_change = False
+        user.save(update_fields=["password", "force_password_change", "updated_at"])
+        return user

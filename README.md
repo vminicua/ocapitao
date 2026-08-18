@@ -116,8 +116,13 @@ npm run tauri:build
 ## Utilizador inicial
 
 - Email: `admin@ocapitao.local`
-- Senha inicial: `admin123`
-- O campo `force_password_change` fica ativo para futura alteração obrigatória.
+- PIN inicial: defina temporariamente `INITIAL_ADMIN_PIN` no `.env` antes da primeira execução de `seed_initial_data`.
+- O PIN não possui valor padrão e nunca é regravado em execuções posteriores do comando.
+- Na primeira entrada, a aplicação exige a troca do PIN antes de permitir qualquer operação.
+
+Remova `INITIAL_ADMIN_PIN` do `.env` depois de criar o administrador. Em produção, execute o Django com
+`DJANGO_SETTINGS_MODULE=config.settings.production`; essa configuração recusa chaves secretas fracas e ativa HTTPS,
+HSTS e cookies seguros.
 
 ## Funcionalidades já preparadas
 

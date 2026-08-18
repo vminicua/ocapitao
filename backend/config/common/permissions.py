@@ -8,6 +8,8 @@ class RoleBasedPermission(BasePermission):
     def user_has_any(user, permission_codes) -> bool:
         if not user or not user.is_authenticated:
             return False
+        if getattr(user, "force_password_change", False):
+            return False
         if user.is_superuser:
             return True
         role = getattr(user, "role", None)
@@ -18,6 +20,8 @@ class RoleBasedPermission(BasePermission):
     def has_permission(self, request, view) -> bool:
         user = request.user
         if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "force_password_change", False):
             return False
         if user.is_superuser:
             return True

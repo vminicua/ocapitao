@@ -200,7 +200,7 @@ function emptyUserForm(): UserFormState {
     phone: '',
     role_id: '',
     password: '',
-    force_password_change: false,
+    force_password_change: true,
     is_active: true,
     is_staff: false,
     department: '',

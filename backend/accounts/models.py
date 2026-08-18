@@ -53,12 +53,16 @@ class UserManager(BaseUserManager):
     def create_user(self, email: str, password: str | None = None, **extra_fields):
         extra_fields.setdefault("is_staff", False)
         extra_fields.setdefault("is_superuser", False)
+        # Programmatic creation supplies the definitive password. Accounts created
+        # through the POS API keep the model default and must change their PIN.
+        extra_fields.setdefault("force_password_change", False)
         return self._create_user(email, password, **extra_fields)
 
     def create_superuser(self, email: str, password: str | None = None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault("force_password_change", False)
         return self._create_user(email, password, **extra_fields)
 
 

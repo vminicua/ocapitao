@@ -5,6 +5,7 @@ import { Navbar } from './components/layout/Navbar'
 import { OnScreenKeyboard } from './components/touch/OnScreenKeyboard'
 import { SplashScreen } from './components/layout/SplashScreen'
 import { LoginScreen } from './features/auth/LoginScreen'
+import { ChangePinScreen } from './features/auth/ChangePinScreen'
 import { BarView } from './features/bar/BarView'
 import { AgendaView } from './features/agenda/AgendaView'
 import { BarbershopView } from './features/barbershop/BarbershopView'
@@ -18,6 +19,7 @@ import { StockView } from './features/stock/StockView'
 import { showErrorAlert, showSuccessToast, showWarningToast } from './lib/alerts'
 import {
   connectCloud,
+  changePin,
   createAppointment,
   createBackup,
   cancelSale,
@@ -606,6 +608,21 @@ function App() {
     void showSuccessToast(`Pagamento de "${transaction.label}" registado — ${transaction.payment_method}.`)
   }
 
+  async function handleChangePin(currentPin: string, newPin: string) {
+    if (!session.accessToken) return
+    setBusy(true)
+    try {
+      await changePin(session.accessToken, currentPin, newPin)
+      void showSuccessToast('PIN alterado. Entre novamente com o novo PIN.')
+      handleLogout()
+    } catch (error) {
+      console.error(error)
+      void showErrorAlert('Não foi possível alterar o PIN', 'Confirme o PIN atual e escolha um novo PIN menos previsível.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleOpenCash(openingAmount: number) {
     await runWithReload((accessToken) => openCashSession(accessToken, openingAmount))
     void showSuccessToast('Caixa aberto com sucesso.')
@@ -858,6 +875,15 @@ function App() {
           onLogin={handleLogin}
           syncState={currentSyncState}
         />
+        <OnScreenKeyboard />
+      </>
+    )
+  }
+
+  if (session.user.force_password_change) {
+    return (
+      <>
+        <ChangePinScreen busy={busy} onCancel={handleLogout} onChangePin={handleChangePin} />
         <OnScreenKeyboard />
       </>
     )

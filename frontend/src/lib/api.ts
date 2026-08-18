@@ -136,6 +136,14 @@ export function getCurrentUser(accessToken: string) {
   return request<AuthUser>('/auth/me/', undefined, accessToken)
 }
 
+export function changePin(accessToken: string, currentPin: string, newPin: string) {
+  return createRecord<{ ok: boolean; message: string }>(
+    '/auth/change-pin/',
+    { current_pin: currentPin, new_pin: newPin },
+    accessToken,
+  )
+}
+
 export function getDashboardSummary(accessToken: string) {
   return request<DashboardSummary>('/dashboard/resumo/', undefined, accessToken)
 }

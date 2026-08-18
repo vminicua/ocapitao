@@ -1,4 +1,6 @@
 from django.core.management.base import BaseCommand
+from django.core.management.base import CommandError
+from django.conf import settings
 from django.utils import timezone
 
 from accounts.models import Employee, Permission, Role, User
@@ -11,7 +13,7 @@ class Command(BaseCommand):
     help = "Cria permissões, perfis, utilizador admin e dados base da aplicação."
 
     def handle(self, *args, **options):
-        default_pin = "1122"
+        default_pin = settings.INITIAL_ADMIN_PIN.strip()
         permissions_map = [
             ("dashboard", "dashboard.view", "Ver dashboard"),
             ("barbershop", "barbershop.view", "Consultar agenda e serviços do barbershop"),
@@ -146,6 +148,8 @@ class Command(BaseCommand):
             role.permissions.set([permissions[item] for item in spec["permissions"]])
             roles[code] = role
 
+        if not User.objects.filter(email="admin@ocapitao.local").exists() and not default_pin:
+            raise CommandError("Defina INITIAL_ADMIN_PIN apenas para a criação inicial do administrador.")
         admin_user, created = User.objects.get_or_create(
             email="admin@ocapitao.local",
             defaults={
@@ -157,13 +161,10 @@ class Command(BaseCommand):
                 "force_password_change": True,
             },
         )
-        admin_user.role = roles["admin"]
-        admin_user.is_staff = True
-        admin_user.is_superuser = True
-        admin_user.force_password_change = False
-        admin_user.username = "admin"
-        admin_user.set_password(default_pin)
-        admin_user.save()
+        if created:
+            admin_user.username = "admin"
+            admin_user.set_password(default_pin)
+            admin_user.save()
 
         Employee.objects.get_or_create(
             user=admin_user,
@@ -180,7 +181,7 @@ class Command(BaseCommand):
                 "username": "harox",
                 "first_name": "Harox",
                 "last_name": "",
-                "role": roles["admin"],
+                "role": roles["cashier"],
                 "title": "Operador",
             },
             {
@@ -188,7 +189,7 @@ class Command(BaseCommand):
                 "username": "hakeem",
                 "first_name": "Hakeem",
                 "last_name": "",
-                "role": roles["admin"],
+                "role": roles["barber"],
                 "title": "Operador",
             },
             {
@@ -196,31 +197,33 @@ class Command(BaseCommand):
                 "username": "guebuza",
                 "first_name": "Guebuza",
                 "last_name": "",
-                "role": roles["admin"],
+                "role": roles["washer"],
                 "title": "Operador",
             },
         ]
 
         for spec in access_users:
-            user, _ = User.objects.get_or_create(
+            user, user_created = User.objects.get_or_create(
                 email=spec["email"],
                 defaults={
                     "username": spec["username"],
                     "first_name": spec["first_name"],
                     "last_name": spec["last_name"],
                     "role": spec["role"],
-                    "force_password_change": False,
+                    "force_password_change": True,
                     "is_active": True,
                 },
             )
-            user.username = spec["username"]
-            user.first_name = spec["first_name"]
-            user.last_name = spec["last_name"]
-            user.role = spec["role"]
-            user.force_password_change = False
-            user.is_active = True
-            user.set_password(default_pin)
-            user.save()
+            if user_created:
+                user.username = spec["username"]
+                user.first_name = spec["first_name"]
+                user.last_name = spec["last_name"]
+                user.role = spec["role"]
+                if not default_pin:
+                    user.set_unusable_password()
+                else:
+                    user.set_password(default_pin)
+                user.save()
 
             Employee.objects.get_or_create(
                 user=user,
@@ -382,5 +385,5 @@ class Command(BaseCommand):
             service.save()
 
         if created:
-            self.stdout.write(self.style.SUCCESS(f"Utilizador admin criado com o PIN inicial {default_pin}."))
+            self.stdout.write(self.style.SUCCESS("Utilizador admin criado com o PIN inicial definido no ambiente."))
         self.stdout.write(self.style.SUCCESS("Seeds iniciais carregadas com sucesso."))

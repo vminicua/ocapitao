@@ -1,5 +1,6 @@
 from rest_framework import generics, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from config.common.permissions import RoleBasedPermission
@@ -7,6 +8,7 @@ from config.common.viewsets import SoftDeleteModelViewSet
 
 from .models import Employee, Permission, Role, User
 from .serializers import (
+    ChangePinSerializer,
     EmployeeSerializer,
     LoginUserSerializer,
     PermissionSerializer,
@@ -14,6 +16,7 @@ from .serializers import (
     RoleSerializer,
     UserSerializer,
 )
+from .throttles import LoginRateThrottle
 
 
 class PermissionViewSet(SoftDeleteModelViewSet):
@@ -74,6 +77,18 @@ class UserViewSet(viewsets.ModelViewSet):
 class PinTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
     serializer_class = PinTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
+
+
+class ChangePinView(generics.GenericAPIView):
+    serializer_class = ChangePinSerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"ok": True, "message": "PIN alterado. Inicie sessão novamente."})
 
 
 class LoginUserListView(generics.ListAPIView):

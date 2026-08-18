@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from accounts.views import CurrentUserView, LoginUserListView, PinTokenObtainPairView
+from accounts.views import ChangePinView, CurrentUserView, LoginUserListView, PinTokenObtainPairView
 from config.api.router import router
 from reports.views import AnalyticsView, DashboardSummaryView
 from sync.views import BackupRestoreView, BackupView, CloudConnectView, CloudDisconnectView, HealthView, PingView, SyncFeedView, SyncNowView, SyncStatusView
@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/auth/token/", PinTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", CurrentUserView.as_view(), name="current_user"),
+    path("api/auth/change-pin/", ChangePinView.as_view(), name="change_pin"),
     path("api/dashboard/resumo/", DashboardSummaryView.as_view(), name="dashboard_summary"),
     path("api/reports/analytics/", AnalyticsView.as_view(), name="reports_analytics"),
     path("api/sync/status/", SyncStatusView.as_view(), name="sync_status"),
