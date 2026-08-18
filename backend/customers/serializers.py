@@ -1,9 +1,10 @@
 from rest_framework import serializers
 
 from accounts.models import Employee
+from barbershop.models import Service
 from config.common.serializers import SyncableModelSerializer
 
-from .models import Customer
+from .models import Customer, LoyaltyLedger, LoyaltyProgram, Promotion, PromotionRedemption
 
 
 class CustomerSerializer(SyncableModelSerializer):
@@ -59,3 +60,35 @@ class CustomerSerializer(SyncableModelSerializer):
         if duplicate.exists():
             raise serializers.ValidationError("Já existe um cliente com este email.")
         return value.lower()
+
+
+class LoyaltyProgramSerializer(SyncableModelSerializer):
+    class Meta:
+        model = LoyaltyProgram
+        fields = "__all__"
+
+
+class PromotionSerializer(SyncableModelSerializer):
+    eligible_service_ids = serializers.PrimaryKeyRelatedField(many=True, queryset=Service.objects.all(), source="eligible_services", write_only=True, required=False)
+    eligible_services = serializers.SerializerMethodField()
+    class Meta:
+        model = Promotion
+        fields = "__all__"
+
+    def get_eligible_services(self, obj):
+        return [{"id": str(service.id), "name": service.name} for service in obj.eligible_services.all()]
+
+
+class PromotionRedemptionSerializer(SyncableModelSerializer):
+    promotion_name = serializers.CharField(source="promotion.name", read_only=True)
+    customer_name = serializers.CharField(source="customer.full_name", read_only=True)
+    class Meta:
+        model = PromotionRedemption
+        fields = "__all__"
+
+
+class LoyaltyLedgerSerializer(SyncableModelSerializer):
+    customer_name = serializers.CharField(source="customer.full_name", read_only=True)
+    class Meta:
+        model = LoyaltyLedger
+        fields = "__all__"

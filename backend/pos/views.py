@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import status
@@ -201,6 +201,7 @@ class SaleViewSet(SoftDeleteModelViewSet):
         "complete": ["pos.manage"],
         "receive_payment": ["pos.manage"],
         "cancel": ["pos.manage"],
+        "receipt": ["pos.view", "pos.manage"],
     }
 
     def get_queryset(self):
@@ -238,6 +239,8 @@ class SaleViewSet(SoftDeleteModelViewSet):
             sale.balance_due = Decimal("0.00")
             sale.payment_status = Sale.PaymentStatus.PAID
             sale.save(update_fields=["amount_paid", "balance_due", "payment_status", "updated_at"])
+            from customers.loyalty import accrue_points
+            accrue_points(sale)
         return Response(self.get_serializer(sale).data)
 
     @action(detail=True, methods=["post"])
@@ -273,7 +276,39 @@ class SaleViewSet(SoftDeleteModelViewSet):
             sale.commissions.filter(status=Commission.Status.ACCRUED).update(
                 status=Commission.Status.REVERSED, notes="Estornada por cancelamento da venda", updated_at=timezone.now()
             )
+            from customers.loyalty import reverse_loyalty_and_promotions
+            reverse_loyalty_and_promotions(sale)
         return Response(self.get_serializer(sale).data)
+
+    @action(detail=True, methods=["get"])
+    def receipt(self, request, pk=None):
+        sale = self.get_queryset().get(pk=pk)
+        if request.query_params.get("reprint") == "true":
+            Sale.objects.filter(pk=sale.pk).update(
+                receipt_reprint_count=models.F("receipt_reprint_count") + 1,
+                updated_at=timezone.now(),
+            )
+            sale.refresh_from_db()
+        from settings_app.models import Settings
+        config = Settings.objects.first()
+        tax_rate = config.tax_rate if config else Decimal("0")
+        tax_amount = (sale.total_amount * tax_rate / (Decimal("100") + tax_rate)).quantize(Decimal("0.01")) if tax_rate else Decimal("0")
+        return Response({
+            "number": sale.receipt_number,
+            "issued_at": sale.receipt_issued_at,
+            "copy": sale.receipt_reprint_count,
+            "business": {
+                "name": config.business_name if config else "O Capitão", "legal_name": config.legal_name if config else "",
+                "nuit": config.nuit if config else "", "address": config.address if config else "",
+                "phone": config.phone if config else "", "header": config.receipt_header if config else "", "footer": config.receipt_footer if config else "",
+            },
+            "customer": sale.customer_name or sale.label,
+            "operator": sale.seller.user.get_full_name() if sale.seller_id else "",
+            "items": self.get_serializer(sale).data["items"],
+            "payments": self.get_serializer(sale).data["payments"],
+            "subtotal": sale.subtotal, "discount": sale.discount_amount, "total": sale.total_amount,
+            "tax_rate": tax_rate, "tax_included": tax_amount, "status": sale.status,
+        })
 
 
 class SaleItemViewSet(SoftDeleteModelViewSet):

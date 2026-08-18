@@ -4,8 +4,8 @@ from accounts.views import EmployeeViewSet, PermissionViewSet, RoleViewSet, User
 from bar.views import ProductCategoryViewSet, ProductViewSet
 from barbershop.views import AppointmentViewSet, ServiceCategoryViewSet, ServiceViewSet
 from carwash.views import VehicleViewSet
-from customers.views import CustomerViewSet
-from inventory.views import StockMovementViewSet
+from customers.views import CustomerViewSet, LoyaltyLedgerViewSet, LoyaltyProgramViewSet, PromotionRedemptionViewSet, PromotionViewSet
+from inventory.views import PurchaseOrderItemViewSet, PurchaseOrderViewSet, StockBalanceViewSet, StockCountLineViewSet, StockCountViewSet, StockLocationViewSet, StockLotViewSet, StockMovementViewSet, StockTransferViewSet, SupplierViewSet
 from pos.views import CashMovementViewSet, CashSessionViewSet, CommissionViewSet, OperationalSessionViewSet, PaymentViewSet, SaleItemViewSet, SaleViewSet
 from reports.views import DailySnapshotViewSet
 from settings_app.views import SettingsViewSet
@@ -17,12 +17,25 @@ router.register("roles", RoleViewSet)
 router.register("users", UserViewSet)
 router.register("employees", EmployeeViewSet)
 router.register("customers", CustomerViewSet)
+router.register("loyalty-programs", LoyaltyProgramViewSet)
+router.register("promotions", PromotionViewSet)
+router.register("promotion-redemptions", PromotionRedemptionViewSet)
+router.register("loyalty-ledger", LoyaltyLedgerViewSet)
 router.register("service-categories", ServiceCategoryViewSet)
 router.register("services", ServiceViewSet)
 router.register("appointments", AppointmentViewSet)
 router.register("product-categories", ProductCategoryViewSet)
 router.register("products", ProductViewSet)
 router.register("stock-movements", StockMovementViewSet)
+router.register("suppliers", SupplierViewSet)
+router.register("stock-locations", StockLocationViewSet)
+router.register("stock-balances", StockBalanceViewSet)
+router.register("purchase-orders", PurchaseOrderViewSet)
+router.register("purchase-order-items", PurchaseOrderItemViewSet)
+router.register("stock-lots", StockLotViewSet)
+router.register("stock-counts", StockCountViewSet)
+router.register("stock-count-lines", StockCountLineViewSet)
+router.register("stock-transfers", StockTransferViewSet)
 router.register("vehicles", VehicleViewSet)
 router.register("cash-sessions", CashSessionViewSet)
 router.register("cash-movements", CashMovementViewSet)

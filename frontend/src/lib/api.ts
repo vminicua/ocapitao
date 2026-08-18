@@ -23,6 +23,8 @@ import type {
   SyncState,
   UserRecord,
   Vehicle,
+  AnalyticsReport,
+  SaleReceipt,
 } from '../types/models'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api'
@@ -156,6 +158,23 @@ export function getSales(accessToken: string) {
 
 export function getCommissions(accessToken: string) {
   return requestList<CommissionRecord>('/commissions/', accessToken)
+}
+
+export function getAnalytics(accessToken: string, dateFrom: string, dateTo: string) {
+  return request<AnalyticsReport>(`/reports/analytics/?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`, undefined, accessToken)
+}
+
+export async function downloadAnalyticsCsv(accessToken: string, dateFrom: string, dateTo: string) {
+  const response = await fetch(`${API_BASE}/reports/analytics/?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&export=csv`, { headers: { Authorization: `Bearer ${accessToken}` } })
+  if (!response.ok) throw new Error(await response.text())
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url; link.download = `relatorio-${dateFrom}-${dateTo}.csv`; link.click()
+  URL.revokeObjectURL(url)
+}
+
+export function getSaleReceipt(accessToken: string, saleId: string, reprint = false) {
+  return request<SaleReceipt>(`/sales/${saleId}/receipt/${reprint ? '?reprint=true' : ''}`, undefined, accessToken)
 }
 
 export function getBackups(accessToken: string) {
@@ -346,6 +365,20 @@ export function updateStockMovement(accessToken: string, movementId: string, pay
 export function deleteStockMovement(accessToken: string, movementId: string) {
   return deleteRecord('/stock-movements/', movementId, accessToken)
 }
+
+export function getSuppliers(accessToken: string) { return requestList<Record<string, unknown>>('/suppliers/', accessToken) }
+export function saveSupplier(accessToken: string, payload: JsonRecord, id?: string) { return id ? updateRecord('/suppliers/', id, payload, accessToken) : createRecord('/suppliers/', payload, accessToken) }
+export function getStockLocations(accessToken: string) { return requestList<Record<string, unknown>>('/stock-locations/', accessToken) }
+export function saveStockLocation(accessToken: string, payload: JsonRecord) { return createRecord('/stock-locations/', payload, accessToken) }
+export function getPurchaseOrders(accessToken: string) { return requestList<Record<string, unknown>>('/purchase-orders/', accessToken) }
+export function savePurchaseOrder(accessToken: string, payload: JsonRecord) { return createRecord('/purchase-orders/', payload, accessToken) }
+export function savePurchaseOrderItem(accessToken: string, payload: JsonRecord) { return createRecord('/purchase-order-items/', payload, accessToken) }
+export function receivePurchaseOrder(accessToken: string, id: string, items: JsonRecord[]) { return createRecord(`/purchase-orders/${id}/receive/`, { items }, accessToken) }
+export function getStockCounts(accessToken: string) { return requestList<Record<string, unknown>>('/stock-counts/', accessToken) }
+export function getPromotions(accessToken: string) { return requestList<Record<string, unknown>>('/promotions/', accessToken) }
+export function savePromotion(accessToken: string, payload: JsonRecord, id?: string) { return id ? updateRecord('/promotions/', id, payload, accessToken) : createRecord('/promotions/', payload, accessToken) }
+export function getLoyaltyPrograms(accessToken: string) { return requestList<Record<string, unknown>>('/loyalty-programs/', accessToken) }
+export function saveLoyaltyProgram(accessToken: string, payload: JsonRecord, id?: string) { return id ? updateRecord('/loyalty-programs/', id, payload, accessToken) : createRecord('/loyalty-programs/', payload, accessToken) }
 
 export function getSyncStatus(accessToken: string) {
   return request<SyncState>('/sync/status/', undefined, accessToken)

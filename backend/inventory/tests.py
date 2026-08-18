@@ -7,7 +7,7 @@ from accounts.models import Permission, Role, User
 from bar.models import Product, ProductCategory
 from settings_app.models import Settings
 
-from .models import StockMovement
+from .models import PurchaseOrder, PurchaseOrderItem, StockBalance, StockCount, StockCountLine, StockLocation, StockLot, StockMovement, StockTransfer, Supplier
 
 
 class StockMovementFlowTests(APITestCase):
@@ -109,3 +109,32 @@ class StockMovementFlowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, Decimal("10.00"))
+
+    def test_purchase_receipt_updates_stock_cost_location_lot_and_status(self):
+        supplier = Supplier.objects.create(name="Fornecedor Teste")
+        location = StockLocation.objects.create(name="Armazém")
+        order = PurchaseOrder.objects.create(number="PO-001", supplier=supplier, location=location, created_by=self.user)
+        item = PurchaseOrderItem.objects.create(order=order, product=self.product, quantity_ordered=Decimal("4"), unit_cost=Decimal("30"))
+        response = self.client.post(f"/api/purchase-orders/{order.id}/receive/", {"items": [{"item_id": str(item.id), "quantity": "4", "lot_number": "L-1"}]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db(); order.refresh_from_db(); item.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, Decimal("14"))
+        self.assertEqual(self.product.cost_price, Decimal("22.86"))
+        self.assertEqual(order.status, PurchaseOrder.Status.RECEIVED)
+        self.assertEqual(StockBalance.objects.get(product=self.product, location=location).quantity, Decimal("4"))
+        self.assertEqual(StockLot.objects.get(lot_number="L-1").quantity, Decimal("4"))
+
+    def test_transfer_and_physical_count_are_atomic(self):
+        source = StockLocation.objects.create(name="Armazém")
+        destination = StockLocation.objects.create(name="Loja")
+        StockBalance.objects.create(product=self.product, location=source, quantity=Decimal("6"))
+        moved = self.client.post("/api/stock-transfers/", {"product": str(self.product.id), "source": str(source.id), "destination": str(destination.id), "quantity": "2", "notes": "Reposição"}, format="json")
+        self.assertEqual(moved.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(StockBalance.objects.get(product=self.product, location=source).quantity, Decimal("4"))
+        count = StockCount.objects.create(location=destination, created_by=self.user)
+        StockCountLine.objects.create(count=count, product=self.product, expected_quantity=Decimal("2"), counted_quantity=Decimal("3"))
+        approved = self.client.post(f"/api/stock-counts/{count.id}/approve/", {}, format="json")
+        self.assertEqual(approved.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, Decimal("11"))
+        self.assertEqual(StockBalance.objects.get(product=self.product, location=destination).quantity, Decimal("3"))

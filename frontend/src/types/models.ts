@@ -372,6 +372,43 @@ export interface CommissionRecord {
   created_at: string
 }
 
+export interface AnalyticsReport {
+  date_from: string
+  date_to: string
+  revenue: number | string
+  discounts: number | string
+  average_ticket: number | string
+  sales_count: number
+  debts: number | string
+  cancelled_count: number
+  inventory_units: number | string
+  inventory_value: number | string
+  low_stock_count: number
+  internal_consumption: number | string
+  losses: number | string
+  commissions: number | string
+  by_department: Array<{ department: string; total: number | string; count: number }>
+  by_payment: Array<{ method: string; total: number | string; count: number }>
+  top_items: Array<{ description: string; item_type: string; quantity: number | string; total: number | string }>
+}
+
+export interface SaleReceipt {
+  number: string
+  issued_at: string
+  copy: number
+  business: { name: string; legal_name: string; nuit: string; address: string; phone: string; header: string; footer: string }
+  customer: string
+  operator: string
+  items: SaleRecord['items']
+  payments: SaleRecord['payments']
+  subtotal: number | string
+  discount: number | string
+  total: number | string
+  tax_rate: number | string
+  tax_included: number | string
+  status: string
+}
+
 export interface BackupRecord {
   file: string
   sha256: string

@@ -7,8 +7,8 @@ from accounts.models import Employee, Permission, Role
 from bar.models import Product, ProductCategory
 from barbershop.models import Appointment, Service, ServiceCategory
 from carwash.models import Vehicle
-from customers.models import Customer
-from inventory.models import StockMovement
+from customers.models import Customer, LoyaltyLedger, LoyaltyProgram, Promotion, PromotionRedemption
+from inventory.models import PurchaseOrder, PurchaseOrderItem, StockBalance, StockCount, StockCountLine, StockLocation, StockLot, StockMovement, StockTransfer, Supplier
 from pos.models import CashMovement, CashSession, Commission, OperationalSession, Payment, Sale, SaleItem
 from reports.models import DailySnapshot
 from settings_app.models import Settings
@@ -23,12 +23,25 @@ SYNC_MODELS = (
     Role,
     Employee,
     Customer,
+    LoyaltyProgram,
+    Promotion,
+    PromotionRedemption,
+    LoyaltyLedger,
     ServiceCategory,
     Service,
     Appointment,
     ProductCategory,
     Product,
     StockMovement,
+    Supplier,
+    StockLocation,
+    StockBalance,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    StockLot,
+    StockCount,
+    StockCountLine,
+    StockTransfer,
     Vehicle,
     CashSession,
     CashMovement,
@@ -87,5 +100,11 @@ for model in SYNC_MODELS:
 
 @receiver(m2m_changed, sender=Role.permissions.through)
 def role_permissions_changed(sender, instance, action, **kwargs):
+    if action in {"post_add", "post_remove", "post_clear"}:
+        _queue_instance(instance, created=False)
+
+
+@receiver(m2m_changed, sender=Promotion.eligible_services.through)
+def promotion_services_changed(sender, instance, action, **kwargs):
     if action in {"post_add", "post_remove", "post_clear"}:
         _queue_instance(instance, created=False)

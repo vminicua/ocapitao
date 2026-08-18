@@ -20,7 +20,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from accounts.views import CurrentUserView, LoginUserListView, PinTokenObtainPairView
 from config.api.router import router
-from reports.views import DashboardSummaryView
+from reports.views import AnalyticsView, DashboardSummaryView
 from sync.views import BackupRestoreView, BackupView, CloudConnectView, CloudDisconnectView, HealthView, PingView, SyncFeedView, SyncNowView, SyncStatusView
 
 urlpatterns = [
@@ -34,6 +34,7 @@ urlpatterns = [
     path("api/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", CurrentUserView.as_view(), name="current_user"),
     path("api/dashboard/resumo/", DashboardSummaryView.as_view(), name="dashboard_summary"),
+    path("api/reports/analytics/", AnalyticsView.as_view(), name="reports_analytics"),
     path("api/sync/status/", SyncStatusView.as_view(), name="sync_status"),
     path("api/sync/run/", SyncNowView.as_view(), name="sync_run"),
     path("api/sync/feed/", SyncFeedView.as_view(), name="sync_feed"),

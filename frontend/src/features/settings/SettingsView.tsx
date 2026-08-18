@@ -19,8 +19,9 @@ import type {
   SyncQueueRecord,
   UserRecord,
 } from '../../types/models'
+import { LoyaltySettings } from './LoyaltySettings'
 
-type SettingsTab = 'business' | 'operations' | 'team' | 'services' | 'access' | 'printers'
+type SettingsTab = 'business' | 'operations' | 'team' | 'services' | 'loyalty' | 'access' | 'printers'
 
 interface SettingsViewProps {
   backups: BackupRecord[]
@@ -45,6 +46,7 @@ interface SettingsViewProps {
   onCreateBackup: () => Promise<unknown>
   onRestoreBackup: (file: string) => Promise<unknown>
   onResolveSync: (id: number, resolution: 'keep_local' | 'use_cloud') => Promise<unknown>
+  accessToken: string
 }
 
 interface SettingsFormState {
@@ -299,7 +301,7 @@ export function SettingsView({
   onDeactivateUser,
   onCreateBackup,
   onRestoreBackup,
-  onResolveSync,
+  onResolveSync, accessToken,
 }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('business')
   const [settingsForm, setSettingsForm] = useState<SettingsFormState>(() => buildSettingsForm(settings))
@@ -573,6 +575,7 @@ export function SettingsView({
         <button type="button" className={`chip-button ${activeTab === 'services' ? 'is-selected' : ''}`} onClick={() => setActiveTab('services')}>
           Serviços
         </button>
+        <button type="button" className={`chip-button ${activeTab === 'loyalty' ? 'is-selected' : ''}`} onClick={() => setActiveTab('loyalty')}>Fidelização</button>
         <button type="button" className={`chip-button ${activeTab === 'access' ? 'is-selected' : ''}`} onClick={() => setActiveTab('access')}>
           Perfis e acessos
         </button>
@@ -830,6 +833,8 @@ export function SettingsView({
           </article>
         </div>
       ) : null}
+
+      {activeTab === 'loyalty' ? <LoyaltySettings accessToken={accessToken} services={services} /> : null}
 
       {activeTab === 'access' ? (
         <div className="content-grid two-columns">

@@ -18,10 +18,11 @@ import type {
   StockMovementType,
   StockReferenceType,
 } from '../../types/models'
+import { InventoryAdvanced } from './InventoryAdvanced'
 
 type StockFilter = 'all' | DepartmentId
 type StockUsageFilter = 'all' | ProductItemType
-type StockSubView = 'menu' | 'products' | 'categories' | 'subcategories' | 'movements'
+type StockSubView = 'menu' | 'products' | 'categories' | 'subcategories' | 'movements' | 'advanced'
 
 interface StockViewProps {
   products: Product[]
@@ -33,6 +34,7 @@ interface StockViewProps {
   onSaveProduct: (payload: Record<string, unknown>, productId?: string) => Promise<unknown>
   onSaveMovement: (payload: Record<string, unknown>) => Promise<unknown>
   onDeleteMovement: (movementId: string) => Promise<unknown>
+  accessToken: string
 }
 
 interface CategoryFormState {
@@ -214,6 +216,7 @@ export function StockView({
   onSaveProduct,
   onSaveMovement,
   onDeleteMovement,
+  accessToken,
 }: StockViewProps) {
   const [subView, setSubView] = useState<StockSubView>('menu')
   const [filter, setFilter] = useState<StockFilter>('all')
@@ -537,6 +540,7 @@ export function StockView({
             <strong className="stock-nav-card__title">Movimentos</strong>
             <p className="stock-nav-card__desc">Registo de entradas, saídas e ajustes de inventário</p>
           </button>
+          <button type="button" className="stock-nav-card tone-sky" onClick={() => navigateTo('advanced')}><div className="stock-nav-card__icon">📦</div><p className="stock-nav-card__count">PRO</p><strong className="stock-nav-card__title">Compras e armazéns</strong><p className="stock-nav-card__desc">Fornecedores, encomendas, receções, localizações, lotes e contagens</p></button>
         </div>
 
         {allLowStockItems.length > 0 && (
@@ -575,6 +579,8 @@ export function StockView({
       </section>
     )
   }
+
+  if (subView === 'advanced') return <InventoryAdvanced accessToken={accessToken} products={products} onBack={goToMenu} />
 
   // =================== PRODUCTS VIEW ===================
   if (subView === 'products') {

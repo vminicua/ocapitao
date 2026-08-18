@@ -5,6 +5,8 @@ from rest_framework.test import APITestCase
 
 from accounts.models import Employee, Permission, Role, User
 from bar.models import Product, ProductCategory
+from barbershop.models import Service
+from customers.models import Customer, LoyaltyLedger, LoyaltyProgram, Promotion, PromotionRedemption
 from inventory.models import StockMovement
 
 from .models import CashSession, Commission, OperationalSession, Payment, Sale
@@ -175,3 +177,29 @@ class CompleteSaleTests(APITestCase):
         self.client.post(f"/api/sales/{created.data['id']}/cancel/", {}, format="json")
         commission.refresh_from_db()
         self.assertEqual(commission.status, Commission.Status.REVERSED)
+
+    def test_fifth_monthly_cut_is_free_and_cancel_reverses_benefits(self):
+        service = Service.objects.create(department="barbershop", category="Cortes", name="Corte", price=Decimal("200"))
+        customer = Customer.objects.create(full_name="Cliente Fiel", phone="840000000")
+        promotion = Promotion.objects.create(name="5.º corte grátis", department="barbershop", threshold_count=4)
+        promotion.eligible_services.add(service)
+        LoyaltyProgram.objects.create(points_per_currency=Decimal("0.1"))
+        self.open_cash()
+        last = None
+        for index in range(5):
+            last = self.client.post("/api/sales/complete/", {"department": "barbershop", "label": f"Cadeira {index + 1}", "customer_id": str(customer.id), "payment_method": "Dinheiro", "items": [{"service_id": str(service.id), "quantity": "1"}]}, format="json")
+            self.assertEqual(last.status_code, status.HTTP_201_CREATED)
+        sale = Sale.objects.get(pk=last.data["id"])
+        customer.refresh_from_db()
+        self.assertEqual(sale.discount_amount, Decimal("200"))
+        self.assertEqual(sale.total_amount, Decimal("0"))
+        self.assertEqual(PromotionRedemption.objects.get(sale=sale).discount_amount, Decimal("200"))
+        self.assertEqual(customer.loyalty_points, 80)
+        receipt = self.client.get(f"/api/sales/{sale.id}/receipt/?reprint=true")
+        self.assertEqual(receipt.status_code, status.HTTP_200_OK)
+        self.assertEqual(receipt.data["number"], sale.receipt_number)
+        self.client.post(f"/api/sales/{sale.id}/cancel/", {}, format="json")
+        customer.refresh_from_db()
+        self.assertEqual(customer.loyalty_points, 80)
+        self.assertIsNotNone(PromotionRedemption.objects.get(sale=sale).reversed_at)
+        self.assertFalse(LoyaltyLedger.objects.filter(sale=sale, entry_type=LoyaltyLedger.EntryType.EARN).exists())

@@ -175,6 +175,9 @@ class SaleSerializer(SyncableModelSerializer):
             "balance_due",
             "payment_status",
             "status",
+            "receipt_number",
+            "receipt_issued_at",
+            "receipt_reprint_count",
             "notes",
             "items",
             "payments",
@@ -344,6 +347,11 @@ class CompleteSaleSerializer(serializers.Serializer):
         if discount > subtotal:
             raise serializers.ValidationError({"discount_amount": "O desconto não pode superar o subtotal."})
 
+        from customers.loyalty import accrue_points, best_promotion_for_sale, record_promotion
+        promotion, promotion_discount = best_promotion_for_sale(sale)
+        discount = min(subtotal, discount + promotion_discount)
+        sale.discount_amount = discount
+
         total = subtotal - discount
         is_credit = payment_method == "Crédito"
         paid = Decimal("0") if is_credit else total
@@ -353,16 +361,27 @@ class CompleteSaleSerializer(serializers.Serializer):
         sale.balance_due = total - paid
         sale.payment_status = Sale.PaymentStatus.PENDING if is_credit else Sale.PaymentStatus.PAID
         sale.status = Sale.Status.COMPLETED
+        from .models import DocumentSequence
+        year = timezone.localdate().year
+        sequence, _ = DocumentSequence.objects.select_for_update().get_or_create(key=f"sale-{year}")
+        sale.receipt_number = f"OC-{year}-{sequence.next_number:06d}"
+        sale.receipt_issued_at = timezone.now()
+        sequence.next_number += 1
+        sequence.save(update_fields=["next_number"])
         sale.save(update_fields=[
-            "subtotal", "total_amount", "amount_paid", "balance_due", "payment_status", "status", "updated_at",
+            "subtotal", "discount_amount", "total_amount", "amount_paid", "balance_due", "payment_status", "status", "receipt_number", "receipt_issued_at", "updated_at",
         ])
-        if seller and seller.commission_rate > 0:
+        app_settings = Settings.objects.order_by("created_at").first()
+        commission_rate = seller.commission_rate if seller and seller.commission_rate > 0 else (
+            app_settings.default_commission_percent if seller and app_settings else Decimal("0")
+        )
+        if seller and commission_rate > 0:
             Commission.objects.create(
                 sale=sale,
                 employee=seller,
                 basis_amount=sale.total_amount,
-                rate=seller.commission_rate,
-                amount=(sale.total_amount * seller.commission_rate / Decimal("100")).quantize(Decimal("0.01")),
+                rate=commission_rate,
+                amount=(sale.total_amount * commission_rate / Decimal("100")).quantize(Decimal("0.01")),
             )
 
         if not is_credit:
@@ -374,6 +393,8 @@ class CompleteSaleSerializer(serializers.Serializer):
                 paid_at=timezone.now(),
                 reference=payment_reference,
             )
+        record_promotion(sale, promotion, promotion_discount)
+        accrue_points(sale)
 
         if operational_session:
             OperationalSession.objects.filter(pk=operational_session.id).update(

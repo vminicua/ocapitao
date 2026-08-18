@@ -6,6 +6,7 @@ from datetime import timedelta
 from accounts.models import Employee
 from config.common.serializers import SyncableModelSerializer
 from customers.models import Customer
+from settings_app.models import Settings
 
 from .models import Appointment, Service, ServiceCategory
 
@@ -150,6 +151,10 @@ class AppointmentSerializer(SyncableModelSerializer):
         read_only_fields = ["customer", "employee", "service"]
 
     def validate(self, attrs):
+        walk_in = attrs.get("walk_in", getattr(self.instance, "walk_in", False))
+        app_settings = Settings.objects.order_by("created_at").first()
+        if walk_in and app_settings and not app_settings.allow_walk_in:
+            raise serializers.ValidationError({"walk_in": "Atendimentos sem marcação estão desativados nas configurações."})
         department = attrs.get("department") or getattr(self.instance, "department", None)
         service = attrs.get("service") or getattr(self.instance, "service", None)
         if department and service and department != service.department:

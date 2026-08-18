@@ -693,6 +693,7 @@ function App() {
       case 'caixa':
         return (
           <FinancasView
+            accessToken={session.accessToken ?? ''}
             transactions={transactions}
             cashSession={appData.cashSession}
             onOpenCash={handleOpenCash}
@@ -705,6 +706,7 @@ function App() {
       case 'stock':
         return (
           <StockView
+            accessToken={session.accessToken ?? ''}
             categories={appData.productCategories}
             currentUser={session.user}
             movements={appData.stockMovements}
@@ -758,10 +760,11 @@ function App() {
           />
         )
       case 'reports':
-        return <ReportsView appointments={appData.appointments} commissions={appData.commissions} dashboard={appData.dashboard} />
+        return <ReportsView appointments={appData.appointments} commissions={appData.commissions} dashboard={appData.dashboard} accessToken={session.accessToken ?? ''} />
       case 'settings':
         return (
           <SettingsView
+            accessToken={session.accessToken ?? ''}
             backups={appData.backups}
             syncQueue={appData.syncQueue}
             currentUser={session.user}

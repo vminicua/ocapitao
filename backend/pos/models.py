@@ -139,6 +139,9 @@ class Sale(SyncableModel):
     payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     notes = models.TextField(blank=True)
+    receipt_number = models.CharField(max_length=40, unique=True, null=True, blank=True)
+    receipt_issued_at = models.DateTimeField(null=True, blank=True)
+    receipt_reprint_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ["-created_at"]
@@ -216,5 +219,10 @@ class Commission(SyncableModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class DocumentSequence(models.Model):
+    key = models.CharField(max_length=40, unique=True)
+    next_number = models.PositiveIntegerField(default=1)
 
 # Create your models here.

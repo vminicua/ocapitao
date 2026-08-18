@@ -1,7 +1,8 @@
 import { useDeferredValue, useState } from 'react'
 
 import { formatCurrency } from '../../lib/formatters'
-import type { CashSessionRecord, Transaction } from '../../types/models'
+import { getSaleReceipt } from '../../lib/api'
+import type { CashSessionRecord, SaleReceipt, Transaction } from '../../types/models'
 
 const DEPT: Record<string, { label: string; color: string }> = {
   bar: { label: 'Bar', color: '#d97706' },
@@ -21,6 +22,7 @@ interface FinancasViewProps {
   cashSession: CashSessionRecord | null
   onOpenCash: (openingAmount: number) => Promise<void>
   onCloseCash: (closingAmount: number) => Promise<void>
+  accessToken: string
 }
 
 function formatTime(ts: number) {
@@ -61,7 +63,7 @@ function itemsSummary(transaction: Transaction) {
     .join(', ')
 }
 
-export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, canCancel = false, cashSession, onOpenCash, onCloseCash }: FinancasViewProps) {
+export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, canCancel = false, cashSession, onOpenCash, onCloseCash, accessToken }: FinancasViewProps) {
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('Todos')
   const [methodFilter, setMethodFilter] = useState('Todos')
@@ -76,6 +78,12 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
   const [cashError, setCashError] = useState('')
   const [transactionBusy, setTransactionBusy] = useState(false)
   const [transactionError, setTransactionError] = useState('')
+  const [receipt, setReceipt] = useState<SaleReceipt | null>(null)
+
+  async function showReceipt(reprint = false) {
+    if (!selectedTxn) return
+    try { setReceipt(await getSaleReceipt(accessToken, selectedTxn.id, reprint)) } catch (error) { setTransactionError(String(error)) }
+  }
 
   async function runTransactionAction(action: () => Promise<void>) {
     setTransactionBusy(true)
@@ -193,6 +201,8 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
               ))}
             </div>
 
+            {receipt && <article className="panel receipt-print"><div className="panel-head"><h4>{receipt.business.name}</h4><span>{receipt.number}{receipt.copy > 0 ? ` · 2.ª via ${receipt.copy}` : ''}</span></div><p>{receipt.business.legal_name} · NUIT {receipt.business.nuit}<br />{receipt.business.address} · {receipt.business.phone}</p><div className="record-list">{receipt.items.map(item => <div className="record-row record-row--static" key={item.id}><span>{item.description} × {item.quantity}</span><strong>{formatCurrency(item.total_price)}</strong></div>)}</div><div className="summary-total"><span>Total</span><strong>{formatCurrency(receipt.total)}</strong></div><small>IVA incluído: {formatCurrency(receipt.tax_included)} · Operador: {receipt.operator}</small><p>{receipt.business.footer}</p></article>}
+
             <div className="summary-box">
               <div>
                 <span>Subtotal</span>
@@ -243,6 +253,8 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
             )}
 
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+              <button type="button" className="primary-button" onClick={() => receipt ? window.print() : void showReceipt(false)}>{receipt ? '🖨 Imprimir / PDF' : '🧾 Ver recibo'}</button>
+              {receipt && <button type="button" className="ghost-button" onClick={() => void showReceipt(true)}>Reimprimir</button>}
               {canCancel && onCancelTransaction && (
                 <button
                   type="button"
@@ -524,7 +536,7 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
                         type="button"
                         className="ghost-button"
                         style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem' }}
-                        onClick={() => setSelectedTxn(txn)}
+                        onClick={() => { setReceipt(null); setSelectedTxn(txn) }}
                       >
                         Ver
                       </button>
