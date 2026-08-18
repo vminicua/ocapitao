@@ -21,7 +21,7 @@ interface PaymentModalProps {
   source: 'bar' | 'barbershop' | 'carwash'
   items: PosCartItem[]
   initialDiscount?: number
-  onConfirm: (method: string, discount: number, received: number) => void
+  onConfirm: (method: string, discount: number, received: number) => Promise<void>
   onClose: () => void
 }
 
@@ -41,6 +41,8 @@ export function PaymentModal({
   const [note, setNote] = useState('')
   const [phase, setPhase] = useState<Phase>('input')
   const [paidAt, setPaidAt] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0)
   const discount = Math.min(toNumber(discountStr), subtotal)
@@ -61,11 +63,19 @@ export function PaymentModal({
   const dateStr = new Date(now).toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const timeStr = new Date(now).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' })
 
-  function handlePay() {
-    setPaidAt(Date.now())
-    onConfirm(method, discount, received)
-    setPhase('receipt')
-    if (autoPrint && !isCredit) setTimeout(() => window.print(), 200)
+  async function handlePay() {
+    setSaving(true)
+    setError('')
+    try {
+      await onConfirm(method, discount, received)
+      setPaidAt(Date.now())
+      setPhase('receipt')
+      if (autoPrint && !isCredit) setTimeout(() => window.print(), 200)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível registar o pagamento.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -75,7 +85,7 @@ export function PaymentModal({
     area.innerHTML = isCredit
       ? `<p>DÍVIDA REGISTADA</p><p>${businessName}</p><p>${label}</p><p>${dateStr} ${timeStr}</p><hr><p>Total: ${formatCurrency(total)}</p>${note ? `<p>Nota: ${note}</p>` : ''}<p>Obrigado.</p>`
       : `<p>${businessName}</p><p>${DEPT_LABEL[source]} · ${dateStr} ${timeStr}</p><p>${label}</p><hr>${items.map((i) => `<div style="display:flex;justify-content:space-between"><span>${i.label} ×${i.quantity}</span><span>${formatCurrency(i.price * i.quantity)}</span></div>`).join('')}<hr>${discount > 0 ? `<div style="display:flex;justify-content:space-between"><span>Desconto</span><span>-${formatCurrency(discount)}</span></div>` : ''}<div style="display:flex;justify-content:space-between;font-weight:700"><span>TOTAL</span><span>${formatCurrency(total)}</span></div><p>${method}</p>${received > 0 ? `<div style="display:flex;justify-content:space-between"><span>Troco</span><span>${formatCurrency(Math.max(0, troco))}</span></div>` : ''}<hr>${receiptFooter ? `<p>${receiptFooter}</p>` : ''}`
-  }, [phase])
+  }, [businessName, dateStr, discount, isCredit, items, label, method, note, phase, receiptFooter, received, source, timeStr, total, troco])
 
   if (phase === 'receipt') {
     return (
@@ -304,18 +314,19 @@ export function PaymentModal({
         )}
 
         {/* Actions */}
+        {error && <p className="danger-text" role="alert">{error}</p>}
         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
-          <button type="button" className="ghost-button" onClick={onClose} style={{ flex: 1 }}>
+          <button type="button" className="ghost-button" onClick={onClose} style={{ flex: 1 }} disabled={saving}>
             Cancelar
           </button>
           <button
             type="button"
             className={isCredit ? 'dept-pay-btn dept-pay-btn--credit' : 'primary-button'}
             style={{ flex: 2 }}
-            disabled={!trocoOk || items.length === 0}
-            onClick={handlePay}
+            disabled={saving || !trocoOk || items.length === 0}
+            onClick={() => void handlePay()}
           >
-            {isCredit ? '⚠ Registar dívida' : `✓ Pagar · ${formatCurrency(total)}`}
+            {saving ? 'A registar...' : isCredit ? '⚠ Registar dívida' : `✓ Pagar · ${formatCurrency(total)}`}
           </button>
         </div>
       </div>

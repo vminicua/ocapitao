@@ -9,9 +9,10 @@ import { useSessionManager } from '../../lib/useSessionManager'
 import type { Customer, PosCartItem, Product, Transaction } from '../../types/models'
 
 interface BarViewProps {
+  accessToken: string
   products: Product[]
   customers: Customer[]
-  onTransactionComplete: (transaction: Transaction) => void
+  onTransactionComplete: (transaction: Transaction) => Promise<void>
 }
 
 const CARD_TONES = [
@@ -30,8 +31,8 @@ function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {
   }, {})
 }
 
-export function BarView({ products, customers, onTransactionComplete }: BarViewProps) {
-  const sm = useSessionManager('bar')
+export function BarView({ accessToken, products, customers, onTransactionComplete }: BarViewProps) {
+  const sm = useSessionManager('bar', accessToken)
   const [search, setSearch] = useState('')
   const [showCalc, setShowCalc] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
@@ -39,10 +40,16 @@ export function BarView({ products, customers, onTransactionComplete }: BarViewP
   const [editingLabel, setEditingLabel] = useState<string | null>(null)
   const [labelDraft, setLabelDraft] = useState('')
 
-  const filtered = search
-    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
-    : products
-  const grouped = groupBy(filtered, (p) => p.category ?? 'Produtos')
+  const activeProducts = products.filter((product) => product.department === 'bar' && product.active && product.item_type === 'resale')
+  const grouped = groupBy(activeProducts, (product) => product.category_name || product.category_path || product.category || 'Produtos')
+  const categories = Object.entries(grouped).map(([label, items]) => ({ key: label, label, count: items.length }))
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const currentCategory = categories.some((category) => category.key === selectedCategory)
+    ? selectedCategory
+    : categories[0]?.key ?? ''
+  const visibleProducts = (grouped[currentCategory] ?? []).filter((product) =>
+    !search || product.name.toLowerCase().includes(search.toLowerCase()),
+  )
 
   const subtotal = sm.sessionSubtotal(sm.active)
   const activeTotal = sm.sessionTotal(sm.active)
@@ -63,9 +70,11 @@ export function BarView({ products, customers, onTransactionComplete }: BarViewP
     sm.addItem(sm.activeId, item)
   }
 
-  function handleConfirmPayment(method: string, discount: number, _received: number) {
+  async function handleConfirmPayment(method: string, discount: number, _received: number) {
     const t: Transaction = {
       id: `txn-bar-${Date.now()}`,
+      operational_session_id: sm.active.id,
+      customer_name: sm.active.clientName,
       label: sm.active.clientName
         ? `${sm.active.label} — ${sm.active.clientName}`
         : sm.active.label,
@@ -78,7 +87,7 @@ export function BarView({ products, customers, onTransactionComplete }: BarViewP
       created_at: Date.now(),
       status: method === 'Crédito' ? 'pending' : 'completed',
     }
-    onTransactionComplete(t)
+    await onTransactionComplete(t)
     sm.closeSession(sm.activeId)
     setShowPayment(false)
   }
@@ -175,36 +184,50 @@ export function BarView({ products, customers, onTransactionComplete }: BarViewP
             />
           </div>
           <div className="dept-catalog-body">
-            {products.length === 0 ? (
+            {activeProducts.length === 0 ? (
               <p style={{ color: 'var(--muted)', padding: '1rem' }}>Nenhum produto disponível para o bar.</p>
-            ) : Object.entries(grouped).map(([cat, prods]) => (
-              <div key={cat} className="dept-catalog-section">
-                <h4 className="dept-catalog-section__title">{cat}</h4>
-                <div className="dept-product-grid">
-                  {prods.map((p) => (
+            ) : (
+              <>
+                <div className="dept-category-strip" aria-label="Categorias">
+                  {categories.map((category) => (
                     <button
-                      key={p.id}
+                      key={category.key}
                       type="button"
-                      className={`dept-product-card ${catTone(cat)}`}
-                      onClick={() => handleAdd(p)}
+                      className={`dept-category-card ${catTone(category.label)}${currentCategory === category.key ? ' is-active' : ''}`}
+                      onClick={() => setSelectedCategory(category.key)}
                     >
-                      <div className="dept-product-card__img">
-                        <img
-                          src={p.image_url || '/branding/placeholders/product-default.svg'}
-                          alt=""
-                          onError={(e) => { ;(e.target as HTMLImageElement).src = '/branding/placeholders/product-default.svg' }}
-                        />
-                      </div>
-                      <strong className="dept-product-card__name">{p.name}</strong>
-                      <span className="dept-product-card__price">{formatCurrency(toNumber(p.sale_price))}</span>
-                      {toNumber(p.stock_quantity) > 0 && (
-                        <small className="dept-product-card__stock">Stock: {p.stock_quantity}</small>
-                      )}
+                      <strong>{category.label}</strong>
+                      <span>{category.count} {category.count === 1 ? 'item' : 'itens'}</span>
                     </button>
                   ))}
                 </div>
-              </div>
-            ))}
+                <div className="dept-catalog-section">
+                  <h4 className="dept-catalog-section__title">{currentCategory}</h4>
+                  <div className="dept-product-list">
+                    {visibleProducts.map((product) => (
+                      <button key={product.id} type="button" className="dept-product-list__item" onClick={() => handleAdd(product)}>
+                        <span className={`dept-product-list__icon ${catTone(currentCategory)}`}>
+                          <img
+                            src={product.image_url || '/branding/placeholders/product-default.svg'}
+                            alt=""
+                            onError={(e) => { ;(e.target as HTMLImageElement).src = '/branding/placeholders/product-default.svg' }}
+                          />
+                        </span>
+                        <span className="dept-product-list__details">
+                          <strong>{product.name}</strong>
+                          <small>{toNumber(product.stock_quantity) > 0 ? `Stock: ${product.stock_quantity}` : 'Sem stock'}</small>
+                        </span>
+                        <strong className="dept-product-list__price">{formatCurrency(toNumber(product.sale_price))}</strong>
+                        <span className="dept-product-list__add">+</span>
+                      </button>
+                    ))}
+                  </div>
+                  {visibleProducts.length === 0 && search && (
+                    <p style={{ color: 'var(--muted)', padding: '1rem' }}>Sem resultados para "{search}".</p>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </main>
 

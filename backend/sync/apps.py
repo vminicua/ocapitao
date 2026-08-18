@@ -1,3 +1,5 @@
+import os
+import sys
 import threading
 
 from django.apps import AppConfig
@@ -10,6 +12,18 @@ class SyncConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401
+
+        # Database/setup commands must never create network side effects.
+        non_serving_commands = {"check", "makemigrations", "migrate", "seed_initial_data", "shell", "test"}
+        if any(command in sys.argv for command in non_serving_commands):
+            return
+
+        # Django's development server imports applications once in the
+        # autoreloader parent and again in the serving child. Only the child
+        # should own the SSH tunnel, otherwise both processes race for port
+        # 5523. Other serving processes retain the normal startup behaviour.
+        if "runserver" in sys.argv and os.environ.get("RUN_MAIN") != "true":
+            return
 
         global _auto_connect_started
         if _auto_connect_started:

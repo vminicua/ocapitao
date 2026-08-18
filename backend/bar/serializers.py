@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from config.common.serializers import SyncableModelSerializer
@@ -106,8 +108,13 @@ class ProductSerializer(SyncableModelSerializer):
     def validate(self, attrs):
         category = attrs.get("category") or getattr(self.instance, "category", None)
         department = attrs.get("department") or getattr(self.instance, "department", None)
+        item_type = attrs.get("item_type") or getattr(self.instance, "item_type", Product.ItemType.RESALE)
         if category and department and category.department not in {department, Product.Department.SHARED}:
             raise serializers.ValidationError(
                 {"category_id": "A categoria escolhida não pertence à área selecionada."},
             )
+        # Internal-use stock has a cost, but must never carry a customer sale
+        # price or accidentally become available in a sales catalog.
+        if item_type != Product.ItemType.RESALE:
+            attrs["sale_price"] = Decimal("0")
         return attrs

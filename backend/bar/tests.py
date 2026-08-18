@@ -86,3 +86,31 @@ class ProductCatalogTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("category_id", response.data)
+
+    def test_internal_use_product_cannot_keep_a_sale_price(self):
+        category = ProductCategory.objects.create(
+            name="Cosmeticos de uso interno",
+            department=ProductCategory.Department.BARBERSHOP,
+        )
+
+        response = self.client.post(
+            "/api/products/",
+            {
+                "category_id": str(category.id),
+                "department": Product.Department.BARBERSHOP,
+                "item_type": Product.ItemType.CONSUMABLE,
+                "name": "Spray de acabamento interno",
+                "sku": "BARB-INT-001",
+                "unit": Product.Unit.UNIT,
+                "sale_price": "500.00",
+                "cost_price": "180.00",
+                "stock_quantity": "8.00",
+                "low_stock_threshold": "2.00",
+                "active": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        product = Product.objects.get(pk=response.data["id"])
+        self.assertEqual(product.sale_price, 0)

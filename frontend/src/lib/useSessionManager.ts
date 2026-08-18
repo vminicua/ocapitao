@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { PosCartItem } from '../types/models'
+import { getOperationalSessions, saveOperationalSessions } from './api'
 
 export interface Session {
   id: string
@@ -17,8 +18,7 @@ export type DeptKind = 'bar' | 'barbershop' | 'carwash'
 
 const LABELS: Record<DeptKind, string> = { bar: 'Mesa', barbershop: 'Cadeira', carwash: 'Viatura' }
 
-let _gid = 0
-function gid(dept: string) { return `${dept}-${Date.now()}-${++_gid}` }
+function gid(_dept: string) { return crypto.randomUUID() }
 
 function extractMaxN(sessions: Session[], prefix: string): number {
   let max = sessions.length
@@ -41,7 +41,7 @@ function load(dept: DeptKind): StoredData {
       const parsed = JSON.parse(raw) as StoredData
       if (Array.isArray(parsed?.sessions) && parsed.sessions.length > 0) {
         // Ensure discount field exists (migration for old data)
-        const sessions = parsed.sessions.map((s) => ({ discount: 0, ...s }))
+        const sessions = parsed.sessions.map((s) => ({ ...s, discount: s.discount ?? 0 }))
         return { sessions, activeId: parsed.activeId ?? sessions[0].id }
       }
     }
@@ -63,17 +63,59 @@ function save(dept: DeptKind, data: StoredData) {
   } catch {}
 }
 
-export function useSessionManager(dept: DeptKind) {
+export function useSessionManager(dept: DeptKind, accessToken?: string | null) {
   const initial = useRef(load(dept))
   const counterRef = useRef(extractMaxN(initial.current.sessions, LABELS[dept]))
 
   const [sessions, setSessions] = useState<Session[]>(initial.current.sessions)
   const [activeId, setActiveId] = useState<string>(initial.current.activeId)
+  const hydrated = useRef(false)
+
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void getOperationalSessions(accessToken, dept)
+      .then((records) => {
+        if (cancelled) return
+        if (records.length > 0) {
+          const restored: Session[] = records.map((record) => ({
+            id: record.id,
+            label: record.label,
+            clientName: record.client_name || undefined,
+            phone: record.phone || undefined,
+            vehiclePlate: record.vehicle_plate || undefined,
+            items: record.items ?? [],
+            discount: Number(record.discount_amount),
+            created_at: new Date(record.created_at).getTime(),
+          }))
+          setSessions(restored)
+          setActiveId(restored[0].id)
+          counterRef.current = extractMaxN(restored, LABELS[dept])
+        }
+        hydrated.current = true
+      })
+      .catch(() => { hydrated.current = true })
+    return () => { cancelled = true }
+  }, [accessToken, dept])
 
   // Persist on every change
   useEffect(() => {
     save(dept, { sessions, activeId })
-  }, [dept, sessions, activeId])
+    if (!accessToken || !hydrated.current) return
+    const timer = window.setTimeout(() => {
+      void saveOperationalSessions(accessToken, dept, sessions.map((session) => ({
+        id: session.id,
+        label: session.label,
+        client_name: session.clientName ?? '',
+        phone: session.phone ?? '',
+        vehicle_plate: session.vehiclePlate ?? '',
+        items: session.items,
+        discount_amount: session.discount,
+        status: 'open',
+      })))
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [accessToken, dept, sessions, activeId])
 
   const active = sessions.find((s) => s.id === activeId) ?? sessions[0]
 

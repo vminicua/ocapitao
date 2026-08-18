@@ -41,15 +41,15 @@ export function PosView({ products, services, comandas, onCommandaProcessed }: P
   const [showCalc, setShowCalc] = useState(false)
   const deferredSearch = useDeferredValue(search)
 
-  const catalog = [
+  const fullCatalog = [
     ...products
-      .filter((p) => p.active)
+      .filter((p) => p.active && p.item_type === 'resale')
       .map((p) => ({
         id: `prod-${p.id}`,
         product_id: p.id,
         label: p.name,
         price: toNumber(p.sale_price),
-        meta: p.category_name ?? p.department,
+        meta: p.category_name || p.category_path || p.category || DEPT[p.department]?.label || p.department,
         kind: 'product' as const,
         department: p.department,
         has_stock: true,
@@ -61,12 +61,24 @@ export function PosView({ products, services, comandas, onCommandaProcessed }: P
         product_id: undefined,
         label: s.name,
         price: toNumber(s.price),
-        meta: s.department === 'barbershop' ? 'Barbershop' : 'Carwash',
+        meta: s.subcategory ? `${s.category} / ${s.subcategory}` : s.category,
         kind: 'service' as const,
         department: s.department,
         has_stock: false,
       })),
-  ].filter((e) => e.label.toLowerCase().includes(deferredSearch.toLowerCase()))
+  ]
+  const catalogGroups = fullCatalog.reduce<Record<string, typeof fullCatalog>>((groups, item) => {
+    ;(groups[item.meta] ??= []).push(item)
+    return groups
+  }, {})
+  const categories = Object.entries(catalogGroups).map(([label, items]) => ({ key: label, label, count: items.length }))
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const currentCategory = categories.some((category) => category.key === selectedCategory)
+    ? selectedCategory
+    : categories[0]?.key ?? ''
+  const catalog = (catalogGroups[currentCategory] ?? []).filter((item) =>
+    item.label.toLowerCase().includes(deferredSearch.toLowerCase()),
+  )
 
   function addFromCatalog(item: (typeof catalog)[0]) {
     setCart((prev) => {
@@ -241,19 +253,40 @@ export function PosView({ products, services, comandas, onCommandaProcessed }: P
             />
           </div>
 
-          <div className="catalog-grid">
+          <div className="dept-category-strip" aria-label="Categorias" style={{ marginBottom: '1rem' }}>
+            {categories.map((category) => (
+              <button
+                key={category.key}
+                type="button"
+                className={`dept-category-card${currentCategory === category.key ? ' is-active' : ''}`}
+                style={{ background: `${DEPT[catalogGroups[category.key]?.[0]?.department]?.color ?? '#66758f'}1a` }}
+                onClick={() => setSelectedCategory(category.key)}
+              >
+                <strong>{category.label}</strong>
+                <span>{category.count} {category.count === 1 ? 'item' : 'itens'}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="dept-product-list">
             {catalog.map((item) => {
               const deptInfo = DEPT[item.department] ?? { label: item.department, color: '#666' }
               return (
                 <button
                   key={item.id}
                   type="button"
-                  className="catalog-card"
+                  className="dept-product-list__item"
                   onClick={() => addFromCatalog(item)}
                 >
-                  <span style={{ color: deptInfo.color }}>{item.meta}</span>
-                  <strong>{item.label}</strong>
-                  <small>{formatCurrency(item.price)}</small>
+                  <span className="dept-product-list__icon" style={{ background: `${deptInfo.color}1a`, color: deptInfo.color }}>
+                    {item.kind === 'service' ? '✦' : '▣'}
+                  </span>
+                  <span className="dept-product-list__details">
+                    <strong>{item.label}</strong>
+                    <small style={{ color: deptInfo.color }}>{deptInfo.label}</small>
+                  </span>
+                  <strong className="dept-product-list__price">{formatCurrency(item.price)}</strong>
+                  <span className="dept-product-list__add">+</span>
                 </button>
               )
             })}

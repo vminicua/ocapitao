@@ -26,6 +26,7 @@ MODEL_ENDPOINTS = {
     "carwash.Vehicle": "vehicles",
     "pos.CashSession": "cash-sessions",
     "pos.CashMovement": "cash-movements",
+    "pos.OperationalSession": "operational-sessions",
     "pos.Sale": "sales",
     "pos.SaleItem": "sale-items",
     "pos.Payment": "payments",

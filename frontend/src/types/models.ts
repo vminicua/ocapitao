@@ -277,6 +277,8 @@ export interface Comanda {
 
 export interface Transaction {
   id: string
+  operational_session_id?: string
+  customer_name?: string
   label: string
   source: 'bar' | 'barbershop' | 'carwash'
   items: PosCartItem[]
@@ -289,12 +291,71 @@ export interface Transaction {
   note?: string
 }
 
+export interface SaleRecord {
+  id: string
+  department: 'bar' | 'barbershop' | 'carwash'
+  label: string
+  customer_name: string
+  subtotal: number | string
+  discount_amount: number | string
+  total_amount: number | string
+  amount_paid: number | string
+  balance_due: number | string
+  payment_status: 'pending' | 'partial' | 'paid'
+  status: 'draft' | 'completed' | 'cancelled'
+  notes?: string
+  created_at: string
+  items: Array<{
+    id: string
+    product_id?: string | null
+    service_id?: string | null
+    description: string
+    item_type: 'product' | 'service'
+    quantity: number | string
+    unit_price: number | string
+    total_price: number | string
+  }>
+  payments: Array<{
+    id: string
+    method: 'cash' | 'card' | 'mpesa' | 'transfer' | 'other'
+    amount: number | string
+    paid_at: string
+    reference?: string
+  }>
+}
+
+export interface CashSessionRecord {
+  id: string
+  opened_at: string
+  closed_at?: string | null
+  opening_amount: number | string
+  closing_amount: number | string
+  expected_amount: number | string
+  status: 'open' | 'closed'
+  opened_by_name?: string
+  notes?: string
+}
+
+export interface OperationalSessionRecord {
+  id: string
+  department: 'bar' | 'barbershop' | 'carwash'
+  label: string
+  client_name?: string
+  phone?: string
+  vehicle_plate?: string
+  items: PosCartItem[]
+  discount_amount: number | string
+  status: 'open' | 'completed' | 'cancelled'
+  created_at: string
+}
+
 export interface StockMovement {
   id: string
   product?: string
   product_id?: string
   product_name: string
   product_department?: DepartmentId
+  product_item_type?: ProductItemType
   movement_type: StockMovementType
   reference_type: StockReferenceType
   reference_code: string

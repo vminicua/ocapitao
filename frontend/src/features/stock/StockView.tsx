@@ -20,6 +20,7 @@ import type {
 } from '../../types/models'
 
 type StockFilter = 'all' | DepartmentId
+type StockUsageFilter = 'all' | ProductItemType
 type StockSubView = 'menu' | 'products' | 'categories' | 'subcategories' | 'movements'
 
 interface StockViewProps {
@@ -163,11 +164,23 @@ const departmentOptions = [
   { value: 'carwash', label: 'Carwash' },
   { value: 'shared', label: 'Partilhado' },
 ]
+const departmentTones: Record<string, string> = {
+  all: 'tone-sky',
+  bar: 'tone-gold',
+  barbershop: 'tone-aqua',
+  carwash: 'tone-mint',
+  shared: 'tone-lilac',
+}
 const itemTypeOptions = [
-  { value: 'resale', label: 'Revenda' },
-  { value: 'consumable', label: 'Consumível' },
-  { value: 'supply', label: 'Material' },
+  { value: 'resale', label: 'Para venda ao cliente' },
+  { value: 'consumable', label: 'Uso interno no atendimento' },
+  { value: 'supply', label: 'Material operacional' },
 ]
+const itemTypeMeta: Record<ProductItemType, { label: string; shortLabel: string; description: string; tone: string }> = {
+  resale: { label: 'Para venda ao cliente', shortLabel: 'Venda', description: 'Disponível no Bar, POS e outros catálogos de venda.', tone: 'tone-gold' },
+  consumable: { label: 'Uso interno no atendimento', shortLabel: 'Uso interno', description: 'Consumido na prestação do serviço, sem venda direta.', tone: 'tone-aqua' },
+  supply: { label: 'Material operacional', shortLabel: 'Material', description: 'Ferramentas e materiais de apoio à operação.', tone: 'tone-lilac' },
+}
 const unitOptions = [
   { value: 'unit', label: 'Unidade' },
   { value: 'bottle', label: 'Garrafa' },
@@ -204,6 +217,7 @@ export function StockView({
 }: StockViewProps) {
   const [subView, setSubView] = useState<StockSubView>('menu')
   const [filter, setFilter] = useState<StockFilter>('all')
+  const [usageFilter, setUsageFilter] = useState<StockUsageFilter>('all')
   const [search, setSearch] = useState('')
 
   // Modal states — null = closed, value = open with that form
@@ -236,12 +250,22 @@ export function StockView({
 
   const filteredProducts = products.filter((product) => {
     const matchesFilter = filter === 'all' ? true : product.department === filter
+    const matchesUsage = usageFilter === 'all' ? true : product.item_type === usageFilter
     const term = search.trim().toLowerCase()
     const matchesSearch = !term
       ? true
       : [product.name, product.sku, product.category_name, product.subcategory_name, product.category_path, product.supplier_name]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(term))
+    return matchesFilter && matchesUsage && matchesSearch
+  })
+
+  const productsInCurrentAreaAndSearch = products.filter((product) => {
+    const matchesFilter = filter === 'all' ? true : product.department === filter
+    const term = search.trim().toLowerCase()
+    const matchesSearch = !term || [product.name, product.sku, product.category_name, product.subcategory_name, product.category_path, product.supplier_name]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(term))
     return matchesFilter && matchesSearch
   })
 
@@ -319,7 +343,7 @@ export function StockView({
       sku: productModal.sku.trim(),
       barcode: productModal.barcode.trim(),
       unit: productModal.unit,
-      sale_price: productModal.sale_price,
+      sale_price: productModal.item_type === 'resale' ? productModal.sale_price : '0',
       cost_price: productModal.cost_price,
       low_stock_threshold: productModal.low_stock_threshold,
       reorder_quantity: productModal.reorder_quantity,
@@ -382,6 +406,7 @@ export function StockView({
   function goToMenu() {
     setSubView('menu')
     setFilter('all')
+    setUsageFilter('all')
     setSearch('')
   }
 
@@ -390,21 +415,43 @@ export function StockView({
     setProductModal(null)
     setMovementModal(null)
     setFilter('all')
+    setUsageFilter('all')
     setSearch('')
     setSubView(view)
   }
 
   // Reusable filter bar
+  function departmentItemCount(value: StockFilter): number {
+    if (subView === 'products') {
+      return value === 'all' ? products.length : products.filter((product) => product.department === value).length
+    }
+    if (subView === 'categories') {
+      return value === 'all' ? rootCategories.length : rootCategories.filter((category) => category.department === value).length
+    }
+    if (subView === 'subcategories') {
+      return value === 'all' ? subCategories.length : subCategories.filter((category) => category.department === value).length
+    }
+    return value === 'all' ? movements.length : movements.filter((movement) => movement.product_department === value).length
+  }
+
   function DeptFilterBar({ withSearch = false }: { withSearch?: boolean }) {
+    const filters: Array<{ value: StockFilter; label: string }> = [
+      { value: 'all', label: 'Todas as áreas' },
+      ...departmentOptions.map((option) => ({ value: option.value as DepartmentId, label: option.label })),
+    ]
+
     return (
-      <div className="toolbar-strip">
-        <div className="chip-group">
-          <button type="button" className={`chip-button ${filter === 'all' ? 'is-selected' : ''}`} onClick={() => setFilter('all')}>
-            Todas as áreas
-          </button>
-          {departmentOptions.map((opt) => (
-            <button key={opt.value} type="button" className={`chip-button ${filter === opt.value ? 'is-selected' : ''}`} onClick={() => setFilter(opt.value as DepartmentId)}>
-              {opt.label}
+      <div className="toolbar-strip stock-filter-toolbar">
+        <div className="dept-category-strip stock-department-cards" aria-label="Áreas do inventário">
+          {filters.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`dept-category-card ${departmentTones[option.value]}${filter === option.value ? ' is-active' : ''}`}
+              onClick={() => setFilter(option.value)}
+            >
+              <strong>{option.label}</strong>
+              <span>{departmentItemCount(option.value)} {departmentItemCount(option.value) === 1 ? 'item' : 'itens'}</span>
             </button>
           ))}
         </div>
@@ -556,6 +603,40 @@ export function StockView({
 
         <DeptFilterBar withSearch />
 
+        <div className="stock-usage-section">
+          <div className="stock-usage-heading">
+            <div>
+              <strong>Finalidade do artigo</strong>
+              <small>Separe o que é vendido do que é consumido pela equipa durante os serviços.</small>
+            </div>
+          </div>
+          <div className="dept-category-strip stock-usage-cards" aria-label="Finalidade dos artigos">
+            <button
+              type="button"
+              className={`dept-category-card tone-sky${usageFilter === 'all' ? ' is-active' : ''}`}
+              onClick={() => setUsageFilter('all')}
+            >
+              <strong>Todos os artigos</strong>
+              <span>{productsInCurrentAreaAndSearch.length} itens</span>
+            </button>
+            {(Object.keys(itemTypeMeta) as ProductItemType[]).map((itemType) => {
+              const meta = itemTypeMeta[itemType]
+              const count = productsInCurrentAreaAndSearch.filter((product) => product.item_type === itemType).length
+              return (
+                <button
+                  key={itemType}
+                  type="button"
+                  className={`dept-category-card ${meta.tone}${usageFilter === itemType ? ' is-active' : ''}`}
+                  onClick={() => setUsageFilter(itemType)}
+                >
+                  <strong>{meta.label}</strong>
+                  <span>{count} {count === 1 ? 'item' : 'itens'}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <article className="panel">
           <div className="panel-head">
             <h4>Artigos</h4>
@@ -574,7 +655,12 @@ export function StockView({
                   <img src={product.image_url || defaultProductImage} alt={product.name} className="product-thumb" />
                 </div>
                 <div className="record-main">
-                  <strong>{product.name}</strong>
+                  <div className="stock-product-name-row">
+                    <strong>{product.name}</strong>
+                    <span className={`stock-usage-badge stock-usage-badge--${product.item_type}`}>
+                      {itemTypeMeta[product.item_type].shortLabel}
+                    </span>
+                  </div>
                   <small>{product.category_path || product.category_name} · {product.department} · {product.sku}</small>
                 </div>
                 <div className="timeline-meta">
@@ -624,14 +710,26 @@ export function StockView({
               <div className="form-grid">
                 <TouchSelect label="Categoria / subcategoria" value={productModal.category_id} onChange={(v) => setProductModal((f) => f ? { ...f, category_id: v } : f)} options={productCategoryOptions} />
                 <TouchSelect label="Área" value={productModal.department} onChange={(v) => setProductModal((f) => f ? { ...f, department: v as DepartmentId } : f)} options={departmentOptions} />
-                <TouchSelect label="Tipo de artigo" value={productModal.item_type} onChange={(v) => setProductModal((f) => f ? { ...f, item_type: v as ProductItemType } : f)} options={itemTypeOptions} />
+                <TouchSelect
+                  label="Finalidade do artigo"
+                  value={productModal.item_type}
+                  onChange={(v) => setProductModal((f) => f ? { ...f, item_type: v as ProductItemType } : f)}
+                  options={itemTypeOptions}
+                  helperText={itemTypeMeta[productModal.item_type].description}
+                />
                 <TouchSelect label="Unidade" value={productModal.unit} onChange={(v) => setProductModal((f) => f ? { ...f, unit: v as ProductUnit } : f)} options={unitOptions} />
                 <TouchInput label="Nome" value={productModal.name} onChange={(v) => setProductModal((f) => f ? { ...f, name: v } : f)} />
                 <TouchInput label="SKU" value={productModal.sku} onChange={(v) => setProductModal((f) => f ? { ...f, sku: v } : f)} />
                 <TouchInput label="Código de barras" value={productModal.barcode} onChange={(v) => setProductModal((f) => f ? { ...f, barcode: v } : f)} />
                 <TouchInput label="Fornecedor" value={productModal.supplier_name} onChange={(v) => setProductModal((f) => f ? { ...f, supplier_name: v } : f)} />
                 <TouchInput label="Local de armazenamento" value={productModal.storage_location} onChange={(v) => setProductModal((f) => f ? { ...f, storage_location: v } : f)} />
-                <TouchNumberInput label="Preço de venda" value={productModal.sale_price} onChange={(v) => setProductModal((f) => f ? { ...f, sale_price: v } : f)} />
+                <TouchNumberInput
+                  label={productModal.item_type === 'resale' ? 'Preço de venda' : 'Preço de venda (não aplicável)'}
+                  value={productModal.item_type === 'resale' ? productModal.sale_price : '0'}
+                  onChange={(v) => setProductModal((f) => f ? { ...f, sale_price: v } : f)}
+                  helperText={productModal.item_type === 'resale' ? 'Este artigo ficará disponível nos ecrãs de venda.' : 'Artigos internos não aparecem nos ecrãs de venda.'}
+                  disabled={productModal.item_type !== 'resale'}
+                />
                 <TouchNumberInput label="Custo unitário" value={productModal.cost_price} onChange={(v) => setProductModal((f) => f ? { ...f, cost_price: v } : f)} />
                 <TouchNumberInput
                   label={productModal.id ? 'Stock atual (gerido por movimento)' : 'Stock inicial'}
@@ -928,8 +1026,23 @@ export function StockView({
               <TouchSelect
                 label="Artigo"
                 value={movementModal.product_id}
-                onChange={(v) => setMovementModal((f) => f ? { ...f, product_id: v } : f)}
-                options={filteredProducts.map((p) => ({ value: p.id, label: `${p.name} (${p.sku})` }))}
+                onChange={(v) => {
+                  const product = products.find((item) => item.id === v)
+                  setMovementModal((form) => form ? {
+                    ...form,
+                    product_id: v,
+                    ...(product && product.item_type !== 'resale'
+                      ? { movement_type: 'exit' as StockMovementType, reference_type: 'internal_use' as StockReferenceType }
+                      : {}),
+                  } : form)
+                }}
+                options={filteredProducts.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} · ${itemTypeMeta[p.item_type].shortLabel} (${p.sku})`,
+                }))}
+                helperText={movementModal.product_id
+                  ? itemTypeMeta[products.find((product) => product.id === movementModal.product_id)?.item_type ?? 'resale'].description
+                  : 'A finalidade do artigo orienta automaticamente o tipo de saída.'}
               />
               <TouchSelect
                 label="Tipo de movimento"

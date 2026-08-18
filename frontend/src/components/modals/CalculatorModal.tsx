@@ -91,7 +91,7 @@ export function CalculatorModal({ onClose }: CalculatorModalProps) {
     setDisplay((prev) => (prev.length <= 1 ? '0' : prev.slice(0, -1)))
   }
 
-  function useHistoryResult(result: string) {
+  function applyHistoryResult(result: string) {
     setDisplay(result)
     setPrevValue(null)
     setOperation(null)
@@ -210,7 +210,7 @@ export function CalculatorModal({ onClose }: CalculatorModalProps) {
                     type="button"
                     className="calc-history__entry"
                     title="Clique para usar este resultado"
-                    onClick={() => useHistoryResult(entry.result)}
+                    onClick={() => applyHistoryResult(entry.result)}
                   >
                     <span className="calc-history__expr">{entry.expression}</span>
                     <span className="calc-history__result">= {entry.result}</span>

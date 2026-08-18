@@ -21,6 +21,7 @@ class StockMovementSerializer(SyncableModelSerializer):
     )
     product_name = serializers.CharField(source="product.name", read_only=True)
     product_department = serializers.CharField(source="product.department", read_only=True)
+    product_item_type = serializers.CharField(source="product.item_type", read_only=True)
     created_by_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,6 +37,7 @@ class StockMovementSerializer(SyncableModelSerializer):
             "product_id",
             "product_name",
             "product_department",
+            "product_item_type",
             "movement_type",
             "reference_type",
             "reference_code",

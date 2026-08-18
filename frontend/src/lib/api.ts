@@ -10,6 +10,9 @@ import type {
   Product,
   ProductCategory,
   RoleRecord,
+  SaleRecord,
+  CashSessionRecord,
+  OperationalSessionRecord,
   Service,
   ServiceCategory,
   StockMovement,
@@ -22,6 +25,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api'
 
 interface PaginatedResponse<T> {
   results: T[]
+  next?: string | null
 }
 
 type JsonRecord = Record<string, unknown>
@@ -38,7 +42,8 @@ async function request<T>(path: string, init?: RequestInit, accessToken?: string
     headers.set('Authorization', `Bearer ${accessToken}`)
   }
 
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers })
+  const target = /^https?:\/\//.test(path) ? path : `${API_BASE}${path}`
+  const response = await fetch(target, { ...init, headers })
   if (!response.ok) {
     const message = await response.text()
     throw new Error(message || `Falha ao comunicar com a API (${response.status}).`)
@@ -50,8 +55,18 @@ async function request<T>(path: string, init?: RequestInit, accessToken?: string
 }
 
 async function requestList<T>(path: string, accessToken: string) {
-  const payload = await request<T[] | PaginatedResponse<T>>(path, undefined, accessToken)
-  return unwrapList(payload)
+  const records: T[] = []
+  let next: string | null = path
+  while (next) {
+    const payload: T[] | PaginatedResponse<T> = await request<T[] | PaginatedResponse<T>>(
+      next,
+      undefined,
+      accessToken,
+    )
+    records.push(...unwrapList(payload))
+    next = Array.isArray(payload) ? null : payload.next ?? null
+  }
+  return records
 }
 
 function createRecord<T>(path: string, payload: JsonRecord, accessToken: string) {
@@ -129,6 +144,42 @@ export function getProductCategories(accessToken: string) {
 
 export function getStockMovements(accessToken: string) {
   return requestList<StockMovement>('/stock-movements/', accessToken)
+}
+
+export function getSales(accessToken: string) {
+  return requestList<SaleRecord>('/sales/?status=completed', accessToken)
+}
+
+export function completeSale(accessToken: string, payload: JsonRecord) {
+  return createRecord<SaleRecord>('/sales/complete/', payload, accessToken)
+}
+
+export function receiveSalePayment(accessToken: string, saleId: string, method: string) {
+  return createRecord<SaleRecord>(`/sales/${saleId}/receive-payment/`, { method }, accessToken)
+}
+
+export function cancelSale(accessToken: string, saleId: string) {
+  return createRecord<SaleRecord>(`/sales/${saleId}/cancel/`, {}, accessToken)
+}
+
+export function getCurrentCashSession(accessToken: string) {
+  return request<CashSessionRecord | null>('/cash-sessions/current/', undefined, accessToken)
+}
+
+export function openCashSession(accessToken: string, openingAmount: number) {
+  return createRecord<CashSessionRecord>('/cash-sessions/open/', { opening_amount: openingAmount }, accessToken)
+}
+
+export function closeCashSession(accessToken: string, sessionId: string, closingAmount: number) {
+  return createRecord<CashSessionRecord>(`/cash-sessions/${sessionId}/close/`, { closing_amount: closingAmount }, accessToken)
+}
+
+export function getOperationalSessions(accessToken: string, department: string) {
+  return requestList<OperationalSessionRecord>(`/operational-sessions/?department=${department}&status=open`, accessToken)
+}
+
+export function saveOperationalSessions(accessToken: string, department: string, sessions: JsonRecord[]) {
+  return createRecord<OperationalSessionRecord[]>('/operational-sessions/snapshot/', { department, sessions }, accessToken)
 }
 
 export function getServices(accessToken: string) {

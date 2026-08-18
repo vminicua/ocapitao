@@ -1,7 +1,7 @@
 import { useDeferredValue, useState } from 'react'
 
 import { formatCurrency } from '../../lib/formatters'
-import type { Transaction } from '../../types/models'
+import type { CashSessionRecord, Transaction } from '../../types/models'
 
 const DEPT: Record<string, { label: string; color: string }> = {
   bar: { label: 'Bar', color: '#d97706' },
@@ -15,9 +15,12 @@ const PAY_METHODS = ['Dinheiro', 'Cartão', 'M-Pesa', 'Transferência', 'Outro']
 
 interface FinancasViewProps {
   transactions: Transaction[]
-  onCancelTransaction?: (id: string) => void
-  onMarkAsPaid?: (id: string, method: string) => void
+  onCancelTransaction?: (id: string) => Promise<void>
+  onMarkAsPaid?: (id: string, method: string) => Promise<void>
   canCancel?: boolean
+  cashSession: CashSessionRecord | null
+  onOpenCash: (openingAmount: number) => Promise<void>
+  onCloseCash: (closingAmount: number) => Promise<void>
 }
 
 function formatTime(ts: number) {
@@ -58,7 +61,7 @@ function itemsSummary(transaction: Transaction) {
     .join(', ')
 }
 
-export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, canCancel = false }: FinancasViewProps) {
+export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, canCancel = false, cashSession, onOpenCash, onCloseCash }: FinancasViewProps) {
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('Todos')
   const [methodFilter, setMethodFilter] = useState('Todos')
@@ -68,6 +71,24 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
   const [dateFrom, setDateFrom] = useState(formatDateInput(todayStart()))
   const [dateTo, setDateTo] = useState(formatDateInput(Date.now()))
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
+  const [cashAmount, setCashAmount] = useState('0')
+  const [cashBusy, setCashBusy] = useState(false)
+  const [cashError, setCashError] = useState('')
+  const [transactionBusy, setTransactionBusy] = useState(false)
+  const [transactionError, setTransactionError] = useState('')
+
+  async function runTransactionAction(action: () => Promise<void>) {
+    setTransactionBusy(true)
+    setTransactionError('')
+    try {
+      await action()
+      setSelectedTxn(null)
+    } catch (error) {
+      setTransactionError(error instanceof Error ? error.message : 'Não foi possível concluir a operação.')
+    } finally {
+      setTransactionBusy(false)
+    }
+  }
 
   const deferredSearch = useDeferredValue(search)
 
@@ -120,6 +141,22 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
 
   function handlePrint() {
     window.print()
+  }
+
+  async function handleCashAction() {
+    setCashBusy(true)
+    setCashError('')
+    try {
+      const amount = Number(cashAmount || 0)
+      if (!Number.isFinite(amount) || amount < 0) throw new Error('Introduza um valor válido.')
+      if (cashSession) await onCloseCash(amount)
+      else await onOpenCash(amount)
+      setCashAmount('0')
+    } catch (error) {
+      setCashError(error instanceof Error ? error.message : 'Não foi possível atualizar o caixa.')
+    } finally {
+      setCashBusy(false)
+    }
   }
 
   return (
@@ -197,7 +234,8 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
                   type="button"
                   className="primary-button"
                   style={{ width: '100%', marginTop: '0.5rem' }}
-                  onClick={() => { onMarkAsPaid(selectedTxn.id, markAsPaidMethod); setSelectedTxn(null) }}
+                  disabled={transactionBusy}
+                  onClick={() => void runTransactionAction(() => onMarkAsPaid(selectedTxn.id, markAsPaidMethod))}
                 >
                   ✓ Marcar como pago · {formatCurrency(selectedTxn.total)}
                 </button>
@@ -212,8 +250,7 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
                   style={{ flex: 1, color: 'var(--danger)', borderColor: 'var(--danger)' }}
                   onClick={() => {
                     if (window.confirm(`Cancelar transação "${selectedTxn?.label}"? Esta ação não pode ser desfeita.`)) {
-                      onCancelTransaction(selectedTxn!.id)
-                      setSelectedTxn(null)
+                      void runTransactionAction(() => onCancelTransaction(selectedTxn!.id))
                     }
                   }}
                 >
@@ -229,6 +266,7 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
                 Fechar
               </button>
             </div>
+            {transactionError && <p className="danger-text" role="alert">{transactionError}</p>}
           </div>
         </div>
       )}
@@ -246,6 +284,30 @@ export function FinancasView({ transactions, onCancelTransaction, onMarkAsPaid, 
           </button>
         </div>
       </div>
+
+      <article className={`panel cash-control ${cashSession ? 'cash-control--open' : 'cash-control--closed'}`}>
+        <div className="panel-head">
+          <div>
+            <h4>{cashSession ? 'Caixa aberto' : 'Caixa fechado'}</h4>
+            <small className="touch-helper">
+              {cashSession
+                ? `Aberto em ${new Date(cashSession.opened_at).toLocaleString('pt-MZ')} · fundo ${formatCurrency(cashSession.opening_amount)}`
+                : 'Abra o caixa antes de registar vendas ou pagamentos.'}
+            </small>
+          </div>
+          <span className={`chip ${cashSession ? 'chip-good' : 'chip-warn'}`}>{cashSession ? 'Operacional' : 'Bloqueado'}</span>
+        </div>
+        <div className="cash-control__actions">
+          <label className="touch-field">
+            <span className="touch-label">{cashSession ? 'Valor contado no fecho' : 'Fundo inicial'}</span>
+            <input className="touch-input" type="number" min="0" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} />
+          </label>
+          <button type="button" className={cashSession ? 'ghost-button' : 'primary-button'} disabled={cashBusy} onClick={() => void handleCashAction()}>
+            {cashBusy ? 'A processar...' : cashSession ? 'Fechar caixa' : 'Abrir caixa'}
+          </button>
+        </div>
+        {cashError && <p className="danger-text" role="alert">{cashError}</p>}
+      </article>
 
       {/* Stats strip */}
       <div className="stats-grid financas-print-hide">

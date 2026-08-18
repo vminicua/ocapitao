@@ -17,6 +17,9 @@ import { StockView } from './features/stock/StockView'
 import { showErrorAlert, showSuccessToast, showWarningToast } from './lib/alerts'
 import {
   connectCloud,
+  cancelSale,
+  completeSale,
+  closeCashSession,
   createCustomer,
   createProduct,
   createProductCategory,
@@ -30,6 +33,7 @@ import {
   disconnectCloud,
   getAppointments,
   getCurrentUser,
+  getCurrentCashSession,
   getCustomers,
   getDashboardSummary,
   getPermissions,
@@ -37,6 +41,7 @@ import {
   getProducts,
   getPublicHealth,
   getRoles,
+  getSales,
   getServiceCategories,
   getServices,
   getSettings,
@@ -45,6 +50,8 @@ import {
   getUsers,
   getVehicles,
   signIn,
+  openCashSession,
+  receiveSalePayment,
   triggerSyncNow,
   updateCustomer,
   updateProduct,
@@ -55,22 +62,6 @@ import {
   updateSettings,
   updateUser,
 } from './lib/api'
-import {
-  mockAppointments,
-  mockCategories,
-  mockCustomers,
-  mockDashboard,
-  mockPermissions,
-  mockProducts,
-  mockRoles,
-  mockServiceCategories,
-  mockServices,
-  mockSettings,
-  mockStockMovements,
-  mockSyncState,
-  mockUsers,
-  mockVehicles,
-} from './lib/mockData'
 import type {
   AppSettings,
   Appointment,
@@ -84,6 +75,8 @@ import type {
   Product,
   ProductCategory,
   RoleRecord,
+  SaleRecord,
+  CashSessionRecord,
   Service,
   ServiceCategory,
   StockMovement,
@@ -109,23 +102,65 @@ interface AppData {
   syncState: SyncState
   users: UserRecord[]
   vehicles: Vehicle[]
+  sales: SaleRecord[]
+  cashSession: CashSessionRecord | null
 }
 
-const demoData: AppData = {
-  appointments: mockAppointments,
-  customers: mockCustomers,
-  dashboard: mockDashboard,
-  permissions: mockPermissions,
-  productCategories: mockCategories,
-  products: mockProducts,
-  roles: mockRoles,
-  serviceCategories: mockServiceCategories,
-  services: mockServices,
-  settings: mockSettings,
-  stockMovements: mockStockMovements,
-  syncState: mockSyncState,
-  users: mockUsers,
-  vehicles: mockVehicles,
+const offlineSyncState: SyncState = { online: false, pending_count: 0, mode: 'offline' }
+const emptyDashboard: DashboardSummary = {
+  data: '', total_vendas: 0, totais_por_area: {}, servicos_pendentes: 0,
+  caixa_aberto: false, estado_sincronizacao: offlineSyncState,
+}
+const defaultSettings: AppSettings = {
+  id: '', business_name: 'O Capitão', legal_name: '', nuit: '', address: '', city: '', country: 'Moçambique',
+  phone: '', email: '', currency_code: 'MZN', currency_symbol: 'MT', timezone: 'Africa/Maputo', tax_rate: 0,
+  appointment_slot_minutes: 30, receipt_header: '', receipt_footer: '', printer_name: '', business_hours: '',
+  backup_folder: '', ssh_tunnel_command: '', sync_interval_seconds: 60, auto_sync_enabled: false,
+  enable_barbershop_module: true, enable_bar_module: true, enable_carwash_module: true, enable_pos_module: true,
+  enable_reports_module: true, allow_walk_in: true, enable_low_stock_alerts: true, allow_negative_stock: false,
+  require_pin_on_sale: false, default_markup_percent: 0, default_commission_percent: 0, dark_mode: false,
+}
+const emptyData: AppData = {
+  appointments: [], customers: [], dashboard: emptyDashboard, permissions: [], productCategories: [], products: [],
+  roles: [], serviceCategories: [], services: [], settings: defaultSettings, stockMovements: [],
+  syncState: offlineSyncState, users: [], vehicles: [],
+  sales: [],
+  cashSession: null,
+}
+
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: 'Dinheiro',
+  card: 'Cartão',
+  mpesa: 'M-Pesa',
+  transfer: 'Transferência',
+  other: 'Outro',
+}
+
+function saleToTransaction(sale: SaleRecord): Transaction {
+  const payment = sale.payments[0]
+  return {
+    id: sale.id,
+    label: sale.label || sale.customer_name || `Venda ${sale.id.slice(0, 8)}`,
+    source: sale.department,
+    items: sale.items.map((item) => ({
+      uid: item.id,
+      product_id: item.product_id ?? undefined,
+      service_id: item.service_id ?? undefined,
+      label: item.description,
+      price: Number(item.unit_price),
+      kind: item.item_type,
+      department: sale.department,
+      has_stock: item.item_type === 'product',
+      quantity: Number(item.quantity),
+    })),
+    payment_method: sale.payment_status === 'paid' ? PAYMENT_LABELS[payment?.method] ?? 'Outro' : 'Crédito',
+    subtotal: Number(sale.subtotal),
+    discount: Number(sale.discount_amount),
+    total: Number(sale.total_amount),
+    created_at: new Date(sale.created_at).getTime(),
+    status: sale.payment_status === 'paid' ? 'completed' : 'pending',
+    note: sale.notes,
+  }
 }
 
 function readStoredSession(): AuthSession {
@@ -195,12 +230,12 @@ function getVisibleModules(user: AuthUser | null, settings: AppSettings): Array<
 function App() {
   const [activeModule, setActiveModule] = useState<ModuleId>('menu')
   const [moduleHistory, setModuleHistory] = useState<ModuleId[]>([])
-  const [appData, setAppData] = useState<AppData>(demoData)
+  const [appData, setAppData] = useState<AppData>(emptyData)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('Bem-vindo ao cockpit operacional do O Capitão.')
   const [publicSyncState, setPublicSyncState] = useState<SyncState>({
-    ...mockSyncState,
+    ...offlineSyncState,
     api_online: false,
     label: 'A verificar serviços locais',
     last_error: 'Ainda estamos a validar a API local e a cloud.',
@@ -249,6 +284,8 @@ function App() {
       permissionsResult,
       rolesResult,
       usersResult,
+      salesResult,
+      cashSessionResult,
     ] = await Promise.allSettled([
       getCurrentUser(accessToken),
       getDashboardSummary(accessToken),
@@ -265,6 +302,8 @@ function App() {
       getPermissions(accessToken),
       getRoles(accessToken),
       getUsers(accessToken),
+      getSales(accessToken),
+      getCurrentCashSession(accessToken),
     ])
 
     const failures = [
@@ -283,24 +322,29 @@ function App() {
       permissionsResult,
       rolesResult,
       usersResult,
+      salesResult,
+      cashSessionResult,
     ].filter((item) => item.status === 'rejected').length
 
     setAppData({
-      dashboard: dashboardResult.status === 'fulfilled' ? dashboardResult.value : demoData.dashboard,
-      products: productsResult.status === 'fulfilled' ? productsResult.value : demoData.products,
+      dashboard: dashboardResult.status === 'fulfilled' ? dashboardResult.value : emptyDashboard,
+      products: productsResult.status === 'fulfilled' ? productsResult.value : [],
       productCategories: productCategoriesResult.status === 'fulfilled' ? productCategoriesResult.value : [],
       serviceCategories: serviceCategoriesResult.status === 'fulfilled' ? serviceCategoriesResult.value : [],
       stockMovements: stockMovementsResult.status === 'fulfilled' ? stockMovementsResult.value : [],
-      services: servicesResult.status === 'fulfilled' ? servicesResult.value : demoData.services,
-      customers: customersResult.status === 'fulfilled' ? customersResult.value : demoData.customers,
-      appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : demoData.appointments,
-      vehicles: vehiclesResult.status === 'fulfilled' ? vehiclesResult.value : demoData.vehicles,
-      settings: settingsResult.status === 'fulfilled' && settingsResult.value ? settingsResult.value : demoData.settings,
-      syncState: syncResult.status === 'fulfilled' ? syncResult.value : demoData.syncState,
+      services: servicesResult.status === 'fulfilled' ? servicesResult.value : [],
+      customers: customersResult.status === 'fulfilled' ? customersResult.value : [],
+      appointments: appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : [],
+      vehicles: vehiclesResult.status === 'fulfilled' ? vehiclesResult.value : [],
+      settings: settingsResult.status === 'fulfilled' && settingsResult.value ? settingsResult.value : defaultSettings,
+      syncState: syncResult.status === 'fulfilled' ? syncResult.value : offlineSyncState,
       permissions: permissionsResult.status === 'fulfilled' ? permissionsResult.value : [],
       roles: rolesResult.status === 'fulfilled' ? rolesResult.value : [],
       users: usersResult.status === 'fulfilled' ? usersResult.value : [],
+      sales: salesResult.status === 'fulfilled' ? salesResult.value : [],
+      cashSession: cashSessionResult.status === 'fulfilled' ? cashSessionResult.value : null,
     })
+    setTransactions(salesResult.status === 'fulfilled' ? salesResult.value.map(saleToTransaction) : [])
 
     if (userResult.status === 'fulfilled') {
       setSession((current) => {
@@ -313,7 +357,7 @@ function App() {
     setMessage(
       failures === 0
         ? 'Tudo pronto. Escolha um módulo e continue a operação.'
-        : 'Alguns dados estão em fallback local enquanto a API termina de responder.',
+        : 'Alguns dados não puderam ser carregados. Nenhum dado demonstrativo foi usado.',
     )
   })
 
@@ -411,7 +455,7 @@ function App() {
     })
     setActiveModule('menu')
     setModuleHistory([])
-    setAppData(demoData)
+    setAppData(emptyData)
     setMessage('Sessão terminada.')
   }
 
@@ -492,22 +536,45 @@ function App() {
     }
   }
 
-  function handleTransactionComplete(transaction: Transaction) {
-    setTransactions((prev) => [transaction, ...prev])
+  async function handleTransactionComplete(transaction: Transaction) {
+    await runWithReload((accessToken) => completeSale(accessToken, {
+      department: transaction.source,
+      label: transaction.label,
+      customer_name: transaction.customer_name ?? '',
+      operational_session_id: transaction.operational_session_id,
+      discount_amount: transaction.discount,
+      payment_method: transaction.payment_method,
+      notes: transaction.note ?? '',
+      items: transaction.items.map((item) => ({
+        product_id: item.product_id,
+        service_id: item.service_id,
+        quantity: item.quantity,
+      })),
+    }))
     void showSuccessToast(`Pagamento de "${transaction.label}" registado — ${transaction.payment_method}.`)
   }
 
-  function handleCancelTransaction(id: string) {
-    setTransactions((prev) => prev.filter((t) => t.id !== id))
+  async function handleOpenCash(openingAmount: number) {
+    await runWithReload((accessToken) => openCashSession(accessToken, openingAmount))
+    void showSuccessToast('Caixa aberto com sucesso.')
+  }
+
+  async function handleCloseCash(closingAmount: number) {
+    if (!appData.cashSession) throw new Error('Não existe caixa aberto.')
+    await runWithReload((accessToken) => closeCashSession(accessToken, appData.cashSession!.id, closingAmount))
+    void showSuccessToast('Caixa fechado com sucesso.')
+  }
+
+  async function handleCancelTransaction(id: string) {
+    await runWithReload((accessToken) => cancelSale(accessToken, id))
     void showSuccessToast('Transação cancelada.')
   }
 
-  function handleMarkAsPaid(id: string, method: string) {
-    setTransactions((prev) =>
-      prev.map((t) =>
-        t.id === id ? { ...t, status: 'completed' as const, payment_method: method } : t,
-      ),
-    )
+  async function handleMarkAsPaid(id: string, method: string) {
+    const aliases: Record<string, string> = {
+      Dinheiro: 'cash', Cartão: 'card', 'M-Pesa': 'mpesa', Transferência: 'transfer', Outro: 'other',
+    }
+    await runWithReload((accessToken) => receiveSalePayment(accessToken, id, aliases[method] ?? 'other'))
     void showSuccessToast(`Dívida quitada — ${method}.`)
   }
 
@@ -546,6 +613,7 @@ function App() {
       case 'barbershop':
         return (
           <BarbershopView
+            accessToken={session.accessToken!}
             appointments={appData.appointments}
             customers={appData.customers}
             products={appData.products.filter((product) => product.department === 'barbershop')}
@@ -556,6 +624,7 @@ function App() {
       case 'bar':
         return (
           <BarView
+            accessToken={session.accessToken!}
             products={appData.products.filter((product) => product.department === 'bar')}
             customers={appData.customers}
             onTransactionComplete={handleTransactionComplete}
@@ -564,6 +633,7 @@ function App() {
       case 'carwash':
         return (
           <CarwashView
+            accessToken={session.accessToken!}
             appointments={appData.appointments}
             customers={appData.customers}
             products={appData.products.filter((product) => product.department === 'carwash')}
@@ -576,6 +646,9 @@ function App() {
         return (
           <FinancasView
             transactions={transactions}
+            cashSession={appData.cashSession}
+            onOpenCash={handleOpenCash}
+            onCloseCash={handleCloseCash}
             onCancelTransaction={handleCancelTransaction}
             onMarkAsPaid={handleMarkAsPaid}
             canCancel={canManageSettings}

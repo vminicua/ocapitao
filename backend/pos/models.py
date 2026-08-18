@@ -38,6 +38,36 @@ class CashSession(SyncableModel):
         return f"Caixa {self.opened_at:%d/%m/%Y %H:%M}"
 
 
+class OperationalSession(SyncableModel):
+    """Persistent open order used by tables, chairs and vehicles."""
+
+    class Department(models.TextChoices):
+        BARBERSHOP = "barbershop", "Barbershop"
+        BAR = "bar", "Bar"
+        CARWASH = "carwash", "Carwash"
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Aberta"
+        COMPLETED = "completed", "Concluída"
+        CANCELLED = "cancelled", "Cancelada"
+
+    department = models.CharField(max_length=20, choices=Department.choices)
+    label = models.CharField(max_length=80)
+    client_name = models.CharField(max_length=150, blank=True)
+    phone = models.CharField(max_length=25, blank=True)
+    vehicle_plate = models.CharField(max_length=20, blank=True)
+    items = models.JSONField(default=list, blank=True)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.get_department_display()} - {self.label}"
+
+
 class CashMovement(SyncableModel):
     class MovementType(models.TextChoices):
         OPENING = "opening", "Abertura"
@@ -69,6 +99,11 @@ class Sale(SyncableModel):
         COMPLETED = "completed", "Concluída"
         CANCELLED = "cancelled", "Cancelada"
 
+    class PaymentStatus(models.TextChoices):
+        PENDING = "pending", "Pendente"
+        PARTIAL = "partial", "Parcial"
+        PAID = "paid", "Pago"
+
     session = models.ForeignKey(CashSession, null=True, blank=True, on_delete=models.SET_NULL, related_name="sales")
     customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL, related_name="sales")
     vehicle = models.ForeignKey(Vehicle, null=True, blank=True, on_delete=models.SET_NULL, related_name="sales")
@@ -81,9 +116,14 @@ class Sale(SyncableModel):
     )
     seller = models.ForeignKey(Employee, null=True, blank=True, on_delete=models.SET_NULL, related_name="sales")
     department = models.CharField(max_length=20, choices=Department.choices)
+    label = models.CharField(max_length=150, blank=True)
+    customer_name = models.CharField(max_length=150, blank=True)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    balance_due = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     notes = models.TextField(blank=True)
 

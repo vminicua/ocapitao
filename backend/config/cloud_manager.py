@@ -50,6 +50,12 @@ class CloudManager:
             self._save_credentials_file(ssh_password)
 
     def _load_credentials(self) -> str | None:
+        from django.conf import settings
+
+        env_password = settings.SSH_PASSWORD.strip()
+        if env_password:
+            return env_password
+
         try:
             from settings_app.models import Settings
             obj = Settings.objects.first()

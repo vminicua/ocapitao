@@ -9,11 +9,12 @@ import { useSessionManager } from '../../lib/useSessionManager'
 import type { Appointment, Customer, PosCartItem, Product, Service, Transaction } from '../../types/models'
 
 interface BarbershopViewProps {
+  accessToken: string
   appointments: Appointment[]
   customers: Customer[]
   products: Product[]
   services: Service[]
-  onTransactionComplete: (transaction: Transaction) => void
+  onTransactionComplete: (transaction: Transaction) => Promise<void>
 }
 
 const CARD_TONES = [
@@ -27,13 +28,14 @@ function catTone(cat: string): string {
 }
 
 export function BarbershopView({
+  accessToken,
   appointments,
   customers,
   products,
   services,
   onTransactionComplete,
 }: BarbershopViewProps) {
-  const sm = useSessionManager('barbershop')
+  const sm = useSessionManager('barbershop', accessToken)
   const [search, setSearch] = useState('')
   const [showCalc, setShowCalc] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
@@ -42,13 +44,22 @@ export function BarbershopView({
   const [labelDraft, setLabelDraft] = useState('')
 
   const activeServices = services.filter((s) => s.department === 'barbershop' && s.active)
-  const activeProducts = products.filter((p) => p.department === 'barbershop')
+  const activeProducts = products.filter((p) => p.department === 'barbershop' && p.active && p.item_type === 'resale')
 
   const serviceGroups = activeServices.reduce<Record<string, Service[]>>((acc, s) => {
     const key = s.subcategory ? `${s.category} / ${s.subcategory}` : s.category
     ;(acc[key] ??= []).push(s)
     return acc
   }, {})
+
+  const categories = [
+    ...Object.entries(serviceGroups).map(([label, items]) => ({ key: `service:${label}`, label, count: items.length })),
+    ...(activeProducts.length > 0 ? [{ key: 'products', label: 'Produtos', count: activeProducts.length }] : []),
+  ]
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const currentCategory = categories.some((category) => category.key === selectedCategory)
+    ? selectedCategory
+    : categories[0]?.key ?? ''
 
   const filteredProducts = search
     ? activeProducts.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
@@ -95,9 +106,11 @@ export function BarbershopView({
     sm.addItem(sm.activeId, item)
   }
 
-  function handleConfirmPayment(method: string, discount: number, _received: number) {
+  async function handleConfirmPayment(method: string, discount: number, _received: number) {
     const t: Transaction = {
       id: `txn-bs-${Date.now()}`,
+      operational_session_id: sm.active.id,
+      customer_name: sm.active.clientName,
       label: sm.active.clientName
         ? `${sm.active.label} — ${sm.active.clientName}`
         : sm.active.label,
@@ -110,13 +123,18 @@ export function BarbershopView({
       created_at: Date.now(),
       status: method === 'Crédito' ? 'pending' : 'completed',
     }
-    onTransactionComplete(t)
+    await onTransactionComplete(t)
     sm.closeSession(sm.activeId)
     setShowPayment(false)
   }
 
-  const showServiceSection = !search || filteredServices.length > 0
-  const showProductSection = !search || filteredProducts.length > 0
+  const selectedServiceGroup = currentCategory.startsWith('service:')
+    ? currentCategory.slice('service:'.length)
+    : ''
+  const visibleServices = selectedServiceGroup
+    ? (serviceGroups[selectedServiceGroup] ?? []).filter((service) => filteredServices.some((item) => item.id === service.id))
+    : []
+  const visibleProducts = currentCategory === 'products' ? filteredProducts : []
 
   return (
     <section className="dept-view">
@@ -216,55 +234,59 @@ export function BarbershopView({
             />
           </div>
           <div className="dept-catalog-body">
-            {showServiceSection && Object.entries(serviceGroups).map(([cat, svcs]) => (
-              <div key={cat} className="dept-catalog-section">
-                <h4 className="dept-catalog-section__title">{cat}</h4>
-                <div className="dept-product-grid">
-                  {svcs.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className={`dept-product-card ${catTone(cat)}`}
-                      onClick={() => addService(s)}
-                    >
-                      <div className="dept-product-card__img dept-product-card__img--svc">✂</div>
-                      <strong className="dept-product-card__name">{s.name}</strong>
-                      <span className="dept-product-card__price">{formatCurrency(toNumber(s.price))}</span>
-                      {s.duration_minutes && <small className="dept-product-card__stock">{s.duration_minutes} min</small>}
+            <div className="dept-category-strip" aria-label="Categorias">
+              {categories.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  className={`dept-category-card ${catTone(category.label)}${currentCategory === category.key ? ' is-active' : ''}`}
+                  onClick={() => setSelectedCategory(category.key)}
+                >
+                  <strong>{category.label}</strong>
+                  <span>{category.count} {category.count === 1 ? 'item' : 'itens'}</span>
+                </button>
+              ))}
+            </div>
+
+            {currentCategory && (
+              <div className="dept-catalog-section">
+                <h4 className="dept-catalog-section__title">
+                  {categories.find((category) => category.key === currentCategory)?.label}
+                </h4>
+                <div className="dept-product-list">
+                  {visibleServices.map((service) => (
+                    <button key={service.id} type="button" className="dept-product-list__item" onClick={() => addService(service)}>
+                      <span className={`dept-product-list__icon ${catTone(selectedServiceGroup)}`}>✂</span>
+                      <span className="dept-product-list__details">
+                        <strong>{service.name}</strong>
+                        {service.duration_minutes > 0 && <small>{service.duration_minutes} min</small>}
+                      </span>
+                      <strong className="dept-product-list__price">{formatCurrency(toNumber(service.price))}</strong>
+                      <span className="dept-product-list__add">+</span>
                     </button>
                   ))}
-                </div>
-              </div>
-            ))}
-
-            {showProductSection && filteredProducts.length > 0 && (
-              <div className="dept-catalog-section">
-                <h4 className="dept-catalog-section__title">Produtos</h4>
-                <div className="dept-product-grid">
-                  {filteredProducts.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className={`dept-product-card ${catTone(p.category ?? 'Produtos')}`}
-                      onClick={() => addProduct(p)}
-                    >
-                      <div className="dept-product-card__img">
+                  {visibleProducts.map((product) => (
+                    <button key={product.id} type="button" className="dept-product-list__item" onClick={() => addProduct(product)}>
+                      <span className={`dept-product-list__icon ${catTone(product.category ?? 'Produtos')}`}>
                         <img
-                          src={p.image_url || '/branding/placeholders/product-default.svg'}
+                          src={product.image_url || '/branding/placeholders/product-default.svg'}
                           alt=""
                           onError={(e) => { ;(e.target as HTMLImageElement).src = '/branding/placeholders/product-default.svg' }}
                         />
-                      </div>
-                      <strong className="dept-product-card__name">{p.name}</strong>
-                      <span className="dept-product-card__price">{formatCurrency(toNumber(p.sale_price))}</span>
-                      {toNumber(p.stock_quantity) > 0 && <small className="dept-product-card__stock">Stock: {p.stock_quantity}</small>}
+                      </span>
+                      <span className="dept-product-list__details">
+                        <strong>{product.name}</strong>
+                        <small>{toNumber(product.stock_quantity) > 0 ? `Stock: ${product.stock_quantity}` : 'Sem stock'}</small>
+                      </span>
+                      <strong className="dept-product-list__price">{formatCurrency(toNumber(product.sale_price))}</strong>
+                      <span className="dept-product-list__add">+</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {filteredServices.length === 0 && filteredProducts.length === 0 && search && (
+            {visibleServices.length === 0 && visibleProducts.length === 0 && search && (
               <p style={{ color: 'var(--muted)', padding: '1rem' }}>Sem resultados para "{search}".</p>
             )}
           </div>
