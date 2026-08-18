@@ -29,3 +29,13 @@ class VehicleSerializer(SyncableModelSerializer):
             "notes",
         ]
         read_only_fields = ["customer"]
+
+    def validate_registration_number(self, value):
+        normalized = value.strip().upper().replace(" ", "")
+        if normalized:
+            duplicate = Vehicle.objects.filter(registration_number__iexact=normalized, deleted_at__isnull=True)
+            if self.instance:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError("Já existe uma viatura com esta matrícula.")
+        return normalized

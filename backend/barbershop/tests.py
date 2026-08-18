@@ -1,9 +1,13 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounts.models import Permission, Role, User
+from accounts.models import Employee, Permission, Role, User
+from customers.models import Customer
+from django.utils import timezone
+from datetime import timedelta
+from pos.models import OperationalSession
 
-from .models import Service, ServiceCategory
+from .models import Appointment, Service, ServiceCategory
 
 
 class ServiceCatalogTests(APITestCase):
@@ -105,3 +109,41 @@ class ServiceCatalogTests(APITestCase):
 
         self.assertEqual(list_response.status_code, status.HTTP_200_OK)
         self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class AppointmentOperationsTests(APITestCase):
+    def setUp(self):
+        role = Role.objects.create(code="admin", name="Administrador Agenda")
+        self.user = User.objects.create_user(email="agenda@test.local", password="1122", role=role)
+        self.employee = Employee.objects.create(user=self.user, department=Employee.Department.BARBERSHOP)
+        self.customer = Customer.objects.create(full_name="Ana Agenda", phone="841234567")
+        category = ServiceCategory.objects.create(department="barbershop", name="Cortes")
+        self.service = Service.objects.create(
+            department="barbershop", category="Cortes", category_ref=category,
+            name="Corte", duration_minutes=30, price="300.00",
+        )
+        self.client.force_authenticate(self.user)
+
+    def payload(self, minutes=60):
+        return {
+            "department": "barbershop", "customer_id": str(self.customer.id),
+            "employee_id": str(self.employee.id), "service_id": str(self.service.id),
+            "scheduled_for": (timezone.now() + timedelta(minutes=minutes)).isoformat(),
+            "price": "300.00", "status": "scheduled", "payment_status": "pending",
+        }
+
+    def test_conflicting_appointment_is_rejected(self):
+        first = self.client.post("/api/appointments/", self.payload(), format="json")
+        second = self.client.post("/api/appointments/", self.payload(minutes=70), format="json")
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_start_appointment_creates_linked_operational_session(self):
+        created = self.client.post("/api/appointments/", self.payload(), format="json")
+        response = self.client.post(f"/api/appointments/{created.data['id']}/start/", {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        appointment = Appointment.objects.get(pk=created.data["id"])
+        session = OperationalSession.objects.get(appointment=appointment)
+        self.assertEqual(appointment.status, Appointment.Status.IN_PROGRESS)
+        self.assertEqual(session.responsible, self.employee)
+        self.assertEqual(session.items[0]["service_id"], str(self.service.id))

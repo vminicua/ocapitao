@@ -5,7 +5,7 @@ import { TouchNumberInput } from '../../components/touch/TouchNumberInput'
 import { TouchTextarea } from '../../components/touch/TouchTextarea'
 import { showErrorAlert, showSuccessToast } from '../../lib/alerts'
 import { formatCurrency, formatDateTime } from '../../lib/formatters'
-import type { Appointment, Customer, Vehicle } from '../../types/models'
+import type { Appointment, Customer, EmployeeRecord, Vehicle } from '../../types/models'
 
 interface CustomersViewProps {
   customers: Customer[]
@@ -13,20 +13,25 @@ interface CustomersViewProps {
   vehicles: Vehicle[]
   canManage: boolean
   onSaveCustomer: (payload: Record<string, unknown>, customerId?: string) => Promise<unknown>
+  employees: EmployeeRecord[]
+  onSaveVehicle: (payload: Record<string, unknown>, vehicleId?: string) => Promise<unknown>
 }
 
 interface CustomerFormState {
   id?: string
   full_name: string
   phone: string
-  preferred_barber_name: string
+  email: string
+  address: string
+  birth_date: string
+  preferred_barber_id: string
   loyalty_points: string
   notes: string
   active: boolean
 }
 
 function emptyForm(): CustomerFormState {
-  return { full_name: '', phone: '', preferred_barber_name: '', loyalty_points: '0', notes: '', active: true }
+  return { full_name: '', phone: '', email: '', address: '', birth_date: '', preferred_barber_id: '', loyalty_points: '0', notes: '', active: true }
 }
 
 function buildForm(customer: Customer): CustomerFormState {
@@ -34,7 +39,8 @@ function buildForm(customer: Customer): CustomerFormState {
     id: customer.id,
     full_name: customer.full_name,
     phone: customer.phone,
-    preferred_barber_name: customer.preferred_barber_name ?? '',
+    email: customer.email ?? '', address: customer.address ?? '', birth_date: customer.birth_date ?? '',
+    preferred_barber_id: customer.preferred_barber ?? '',
     loyalty_points: String(customer.loyalty_points ?? 0),
     notes: customer.notes ?? '',
     active: customer.active !== false,
@@ -66,10 +72,11 @@ function avatarColor(name: string): string {
   return PALETTES[Math.abs(hash) % PALETTES.length]
 }
 
-export function CustomersView({ customers, appointments, vehicles, canManage, onSaveCustomer }: CustomersViewProps) {
+export function CustomersView({ customers, appointments, vehicles, employees, canManage, onSaveCustomer, onSaveVehicle }: CustomersViewProps) {
   const [search, setSearch] = useState('')
   const [modalForm, setModalForm] = useState<CustomerFormState | null>(null)
   const [saving, setSaving] = useState(false)
+  const [vehicleForm, setVehicleForm] = useState<{ id?: string; registration_number: string; brand: string; model: string; color: string; notes: string } | null>(null)
 
   const filtered = customers.filter((c) => {
     const term = search.trim().toLowerCase()
@@ -107,7 +114,8 @@ export function CustomersView({ customers, appointments, vehicles, canManage, on
         {
           full_name: modalForm.full_name.trim(),
           phone: modalForm.phone.trim(),
-          preferred_barber_name: modalForm.preferred_barber_name.trim(),
+          email: modalForm.email.trim(), address: modalForm.address.trim(), birth_date: modalForm.birth_date || null,
+          preferred_barber_id: modalForm.preferred_barber_id || null,
           loyalty_points: modalForm.loyalty_points,
           notes: modalForm.notes.trim(),
           active: modalForm.active,
@@ -122,6 +130,17 @@ export function CustomersView({ customers, appointments, vehicles, canManage, on
     } finally {
       setSaving(false)
     }
+  }
+
+  async function saveVehicle() {
+    if (!vehicleForm || !modalForm?.id || !vehicleForm.brand.trim() || !vehicleForm.model.trim()) return
+    setSaving(true)
+    try {
+      await onSaveVehicle({ ...vehicleForm, id: undefined, customer_id: modalForm.id }, vehicleForm.id)
+      setVehicleForm(null)
+      void showSuccessToast('Viatura guardada com sucesso.')
+    } catch { void showErrorAlert('Falha ao guardar viatura', 'Verifique os dados e tente novamente.') }
+    finally { setSaving(false) }
   }
 
   function patch(field: Partial<CustomerFormState>) {
@@ -267,12 +286,10 @@ export function CustomersView({ customers, appointments, vehicles, canManage, on
                 onChange={(v) => patch({ phone: v })}
                 placeholder="84 000 0000"
               />
-              <TouchInput
-                label="Barbeiro / técnico preferido"
-                value={modalForm.preferred_barber_name}
-                onChange={(v) => patch({ preferred_barber_name: v })}
-                helperText="Opcional"
-              />
+              <TouchInput label="Email" value={modalForm.email} onChange={(v) => patch({ email: v })} />
+              <TouchInput label="Morada" value={modalForm.address} onChange={(v) => patch({ address: v })} />
+              <label className="touch-field"><span className="touch-label">Data de nascimento</span><input className="touch-input" type="date" value={modalForm.birth_date} onChange={(e) => patch({ birth_date: e.target.value })}/></label>
+              <label className="touch-field"><span className="touch-label">Barbeiro preferido</span><select className="touch-input" value={modalForm.preferred_barber_id} onChange={(e) => patch({ preferred_barber_id: e.target.value })}><option value="">Sem preferência</option>{employees.filter(e => e.department === 'barbershop' && e.is_active_employee).map(e => <option key={e.id} value={e.id}>{e.user.display_name || e.user.email}</option>)}</select></label>
               <TouchNumberInput
                 label="Pontos de fidelidade"
                 value={modalForm.loyalty_points}
@@ -298,20 +315,20 @@ export function CustomersView({ customers, appointments, vehicles, canManage, on
               </label>
             </div>
 
-            {customerVehicles.length > 0 && (
+            {modalForm.id && (
               <article className="panel">
                 <div className="panel-head">
                   <h4>Viaturas</h4>
-                  <span className="chip">{customerVehicles.length}</span>
+                  <button className="ghost-button" onClick={() => setVehicleForm({ registration_number: '', brand: '', model: '', color: '', notes: '' })}>+ Nova viatura</button>
                 </div>
                 <div className="record-list">
                   {customerVehicles.map((v) => (
-                    <div key={v.id} className="record-row record-row--static">
+                    <button key={v.id} className="record-row" onClick={() => setVehicleForm({ id: v.id, registration_number: v.registration_number, brand: v.brand, model: v.model, color: v.color ?? '', notes: '' })}>
                       <div className="record-main">
                         <strong>{v.brand} {v.model}{v.color ? ` · ${v.color}` : ''}</strong>
                         <small>{v.registration_number}</small>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </article>
@@ -353,6 +370,12 @@ export function CustomersView({ customers, appointments, vehicles, canManage, on
                 {saving ? 'A guardar...' : modalForm.id ? 'Atualizar cliente' : 'Criar cliente'}
               </button>
             </div>
+            {vehicleForm && <div className="panel"><h4>{vehicleForm.id ? 'Editar viatura' : 'Nova viatura'}</h4><div className="form-grid">
+              <TouchInput label="Matrícula" value={vehicleForm.registration_number} onChange={(v) => setVehicleForm({ ...vehicleForm, registration_number: v.toUpperCase() })}/>
+              <TouchInput label="Marca" value={vehicleForm.brand} onChange={(v) => setVehicleForm({ ...vehicleForm, brand: v })}/>
+              <TouchInput label="Modelo" value={vehicleForm.model} onChange={(v) => setVehicleForm({ ...vehicleForm, model: v })}/>
+              <TouchInput label="Cor" value={vehicleForm.color} onChange={(v) => setVehicleForm({ ...vehicleForm, color: v })}/>
+            </div><div className="form-actions"><button className="ghost-button" onClick={() => setVehicleForm(null)}>Cancelar</button><button className="primary-button" disabled={saving} onClick={() => void saveVehicle()}>Guardar viatura</button></div></div>}
           </div>
         </div>
       )}

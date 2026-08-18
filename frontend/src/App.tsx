@@ -6,6 +6,7 @@ import { OnScreenKeyboard } from './components/touch/OnScreenKeyboard'
 import { SplashScreen } from './components/layout/SplashScreen'
 import { LoginScreen } from './features/auth/LoginScreen'
 import { BarView } from './features/bar/BarView'
+import { AgendaView } from './features/agenda/AgendaView'
 import { BarbershopView } from './features/barbershop/BarbershopView'
 import { CarwashView } from './features/carwash/CarwashView'
 import { DashboardView } from './features/dashboard/DashboardView'
@@ -17,10 +18,12 @@ import { StockView } from './features/stock/StockView'
 import { showErrorAlert, showSuccessToast, showWarningToast } from './lib/alerts'
 import {
   connectCloud,
+  createAppointment,
   cancelSale,
   completeSale,
   closeCashSession,
   createCustomer,
+  createVehicle,
   createProduct,
   createProductCategory,
   createRole,
@@ -34,8 +37,10 @@ import {
   getAppointments,
   getCurrentUser,
   getCurrentCashSession,
+  getCommissions,
   getCustomers,
   getDashboardSummary,
+  getEmployees,
   getPermissions,
   getProductCategories,
   getProducts,
@@ -53,7 +58,9 @@ import {
   openCashSession,
   receiveSalePayment,
   triggerSyncNow,
+  startAppointment,
   updateCustomer,
+  updateAppointment,
   updateProduct,
   updateProductCategory,
   updateRole,
@@ -61,6 +68,7 @@ import {
   updateServiceCategory,
   updateSettings,
   updateUser,
+  updateVehicle,
 } from './lib/api'
 import type {
   AppSettings,
@@ -77,6 +85,8 @@ import type {
   RoleRecord,
   SaleRecord,
   CashSessionRecord,
+  EmployeeRecord,
+  CommissionRecord,
   Service,
   ServiceCategory,
   StockMovement,
@@ -104,6 +114,8 @@ interface AppData {
   vehicles: Vehicle[]
   sales: SaleRecord[]
   cashSession: CashSessionRecord | null
+  employees: EmployeeRecord[]
+  commissions: CommissionRecord[]
 }
 
 const offlineSyncState: SyncState = { online: false, pending_count: 0, mode: 'offline' }
@@ -126,6 +138,8 @@ const emptyData: AppData = {
   syncState: offlineSyncState, users: [], vehicles: [],
   sales: [],
   cashSession: null,
+  employees: [],
+  commissions: [],
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -215,6 +229,7 @@ function getVisibleModules(user: AuthUser | null, settings: AppSettings): Array<
     modules.push('stock')
   }
   if (user) {
+    modules.push('agenda')
     modules.push('customers')
   }
   if (settings.enable_reports_module) {
@@ -286,6 +301,8 @@ function App() {
       usersResult,
       salesResult,
       cashSessionResult,
+      employeesResult,
+      commissionsResult,
     ] = await Promise.allSettled([
       getCurrentUser(accessToken),
       getDashboardSummary(accessToken),
@@ -304,6 +321,8 @@ function App() {
       getUsers(accessToken),
       getSales(accessToken),
       getCurrentCashSession(accessToken),
+      getEmployees(accessToken),
+      getCommissions(accessToken),
     ])
 
     const failures = [
@@ -324,6 +343,8 @@ function App() {
       usersResult,
       salesResult,
       cashSessionResult,
+      employeesResult,
+      commissionsResult,
     ].filter((item) => item.status === 'rejected').length
 
     setAppData({
@@ -343,6 +364,8 @@ function App() {
       users: usersResult.status === 'fulfilled' ? usersResult.value : [],
       sales: salesResult.status === 'fulfilled' ? salesResult.value : [],
       cashSession: cashSessionResult.status === 'fulfilled' ? cashSessionResult.value : null,
+      employees: employeesResult.status === 'fulfilled' ? employeesResult.value : [],
+      commissions: commissionsResult.status === 'fulfilled' ? commissionsResult.value : [],
     })
     setTransactions(salesResult.status === 'fulfilled' ? salesResult.value.map(saleToTransaction) : [])
 
@@ -541,7 +564,10 @@ function App() {
       department: transaction.source,
       label: transaction.label,
       customer_name: transaction.customer_name ?? '',
+      customer_id: transaction.customer_id,
+      vehicle_id: transaction.vehicle_id,
       operational_session_id: transaction.operational_session_id,
+      responsible_employee_id: transaction.responsible_employee_id,
       discount_amount: transaction.discount,
       payment_method: transaction.payment_method,
       notes: transaction.note ?? '',
@@ -616,6 +642,7 @@ function App() {
             accessToken={session.accessToken!}
             appointments={appData.appointments}
             customers={appData.customers}
+            employees={appData.employees}
             products={appData.products.filter((product) => product.department === 'barbershop')}
             services={appData.services}
             onTransactionComplete={handleTransactionComplete}
@@ -627,6 +654,7 @@ function App() {
             accessToken={session.accessToken!}
             products={appData.products.filter((product) => product.department === 'bar')}
             customers={appData.customers}
+            employees={appData.employees}
             onTransactionComplete={handleTransactionComplete}
           />
         )
@@ -639,6 +667,7 @@ function App() {
             products={appData.products.filter((product) => product.department === 'carwash')}
             services={appData.services}
             vehicles={appData.vehicles}
+            employees={appData.employees}
             onTransactionComplete={handleTransactionComplete}
           />
         )
@@ -686,6 +715,7 @@ function App() {
             customers={appData.customers}
             appointments={appData.appointments}
             vehicles={appData.vehicles}
+            employees={appData.employees}
             canManage={Boolean(session.user)}
             onSaveCustomer={(payload, customerId) =>
               runWithReload((accessToken) =>
@@ -694,10 +724,22 @@ function App() {
                   : createCustomer(accessToken, payload),
               )
             }
+            onSaveVehicle={(payload, vehicleId) => runWithReload((token) => vehicleId ? updateVehicle(token, vehicleId, payload) : createVehicle(token, payload))}
+          />
+        )
+      case 'agenda':
+        return (
+          <AgendaView
+            appointments={appData.appointments}
+            customers={appData.customers}
+            employees={appData.employees}
+            services={appData.services}
+            onSave={(payload, id) => runWithReload((token) => id ? updateAppointment(token, id, payload) : createAppointment(token, payload))}
+            onStart={(id) => runWithReload((token) => startAppointment(token, id))}
           />
         )
       case 'reports':
-        return <ReportsView appointments={appData.appointments} dashboard={appData.dashboard} />
+        return <ReportsView appointments={appData.appointments} commissions={appData.commissions} dashboard={appData.dashboard} />
       case 'settings':
         return (
           <SettingsView

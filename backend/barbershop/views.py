@@ -1,4 +1,8 @@
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db import transaction
+from django.utils import timezone
 
 from config.common.permissions import RoleBasedPermission
 from config.common.viewsets import SoftDeleteModelViewSet
@@ -121,5 +125,33 @@ class AppointmentViewSet(SoftDeleteModelViewSet):
         if status:
             queryset = queryset.filter(status=status)
         return queryset
+
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        with transaction.atomic():
+            appointment = self.get_object()
+            if appointment.status != Appointment.Status.SCHEDULED:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError("Apenas marcações agendadas podem ser iniciadas.")
+            appointment.status = Appointment.Status.IN_PROGRESS
+            appointment.save(update_fields=["status", "updated_at"])
+            from pos.models import OperationalSession
+            session = OperationalSession.objects.create(
+                department=appointment.department,
+                label=f"Atendimento {appointment.customer.full_name}",
+                customer=appointment.customer,
+                responsible=appointment.employee,
+                appointment=appointment,
+                client_name=appointment.customer.full_name,
+                status=OperationalSession.Status.IN_PROGRESS,
+                started_at=timezone.now(),
+                created_by=request.user,
+                items=[{
+                    "uid": f"appointment-{appointment.id}", "service_id": str(appointment.service_id),
+                    "label": appointment.service.name, "price": float(appointment.price), "kind": "service",
+                    "department": appointment.department, "has_stock": False, "quantity": 1,
+                }],
+            )
+        return Response({"appointment": self.get_serializer(appointment).data, "operational_session_id": str(session.id)})
 
 # Create your views here.

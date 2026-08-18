@@ -12,12 +12,13 @@ from rest_framework.exceptions import ValidationError
 from config.common.permissions import RoleBasedPermission
 from config.common.viewsets import SoftDeleteModelViewSet
 
-from .models import CashMovement, CashSession, OperationalSession, Payment, Sale, SaleItem
+from .models import CashMovement, CashSession, Commission, OperationalSession, Payment, Sale, SaleItem
 from inventory.models import StockMovement
 from .serializers import (
     CashMovementSerializer,
     CashSessionSerializer,
     CompleteSaleSerializer,
+    CommissionSerializer,
     OperationalSessionSerializer,
     PaymentSerializer,
     SaleItemSerializer,
@@ -67,6 +68,33 @@ class OperationalSessionViewSet(SoftDeleteModelViewSet):
             ).exclude(id__in=received_ids).update(status=OperationalSession.Status.CANCELLED)
         queryset = self.get_queryset().filter(department=department, status=OperationalSession.Status.OPEN)
         return Response(self.get_serializer(queryset, many=True).data)
+
+    @action(detail=True, methods=["post"])
+    def transition(self, request, pk=None):
+        target = (request.data or {}).get("status")
+        transitions = {
+            OperationalSession.Status.OPEN: {OperationalSession.Status.WAITING, OperationalSession.Status.IN_PROGRESS, OperationalSession.Status.CANCELLED},
+            OperationalSession.Status.WAITING: {OperationalSession.Status.IN_PROGRESS, OperationalSession.Status.CANCELLED},
+            OperationalSession.Status.IN_PROGRESS: {OperationalSession.Status.PAUSED, OperationalSession.Status.READY, OperationalSession.Status.AWAITING_PAYMENT, OperationalSession.Status.CANCELLED},
+            OperationalSession.Status.PAUSED: {OperationalSession.Status.IN_PROGRESS, OperationalSession.Status.CANCELLED},
+            OperationalSession.Status.READY: {OperationalSession.Status.AWAITING_PAYMENT, OperationalSession.Status.COMPLETED},
+            OperationalSession.Status.AWAITING_PAYMENT: {OperationalSession.Status.COMPLETED},
+        }
+        with transaction.atomic():
+            session = OperationalSession.objects.select_for_update().get(pk=pk, deleted_at__isnull=True)
+            if target not in transitions.get(session.status, set()):
+                raise ValidationError("Transição de estado inválida.")
+            session.status = target
+            now = timezone.now()
+            if target == OperationalSession.Status.IN_PROGRESS:
+                session.started_at = session.started_at or now
+                session.paused_at = None
+            elif target == OperationalSession.Status.PAUSED:
+                session.paused_at = now
+            elif target == OperationalSession.Status.COMPLETED:
+                session.completed_at = now
+            session.save()
+        return Response(self.get_serializer(session).data)
 
 
 class CashSessionViewSet(SoftDeleteModelViewSet):
@@ -242,6 +270,9 @@ class SaleViewSet(SoftDeleteModelViewSet):
             sale.status = Sale.Status.CANCELLED
             sale.notes = "\n".join(filter(None, [sale.notes, (request.data or {}).get("reason", "Venda cancelada")]))
             sale.save(update_fields=["status", "notes", "updated_at"])
+            sale.commissions.filter(status=Commission.Status.ACCRUED).update(
+                status=Commission.Status.REVERSED, notes="Estornada por cancelamento da venda", updated_at=timezone.now()
+            )
         return Response(self.get_serializer(sale).data)
 
 
@@ -276,6 +307,20 @@ class PaymentViewSet(SoftDeleteModelViewSet):
         "update": ["pos.manage"],
         "partial_update": ["pos.manage"],
         "destroy": ["pos.manage"],
+    }
+
+
+class CommissionViewSet(SoftDeleteModelViewSet):
+    queryset = Commission.objects.select_related("sale", "employee__user").all()
+    serializer_class = CommissionSerializer
+    permission_classes = [IsAuthenticated, RoleBasedPermission]
+    allowed_permissions = {
+        "list": ["reports.view", "settings.manage"],
+        "retrieve": ["reports.view", "settings.manage"],
+        "create": ["settings.manage"],
+        "update": ["settings.manage"],
+        "partial_update": ["settings.manage"],
+        "destroy": ["settings.manage"],
     }
 
 # Create your views here.

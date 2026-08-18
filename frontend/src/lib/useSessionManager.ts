@@ -7,6 +7,10 @@ export interface Session {
   id: string
   label: string
   clientName?: string
+  customerId?: string
+  vehicleId?: string
+  responsibleId?: string
+  status?: 'open' | 'waiting' | 'in_progress' | 'paused' | 'ready' | 'awaiting_payment'
   phone?: string
   vehiclePlate?: string
   items: PosCartItem[]
@@ -82,6 +86,10 @@ export function useSessionManager(dept: DeptKind, accessToken?: string | null) {
             id: record.id,
             label: record.label,
             clientName: record.client_name || undefined,
+            customerId: record.customer || undefined,
+            vehicleId: record.vehicle || undefined,
+            responsibleId: record.responsible || undefined,
+            status: record.status === 'completed' || record.status === 'cancelled' ? 'open' : record.status,
             phone: record.phone || undefined,
             vehiclePlate: record.vehicle_plate || undefined,
             items: record.items ?? [],
@@ -107,11 +115,14 @@ export function useSessionManager(dept: DeptKind, accessToken?: string | null) {
         id: session.id,
         label: session.label,
         client_name: session.clientName ?? '',
+        customer_id: session.customerId ?? null,
+        vehicle_id: session.vehicleId ?? null,
+        responsible_id: session.responsibleId ?? null,
         phone: session.phone ?? '',
         vehicle_plate: session.vehiclePlate ?? '',
         items: session.items,
         discount_amount: session.discount,
-        status: 'open',
+        status: session.status ?? 'open',
       })))
     }, 400)
     return () => window.clearTimeout(timer)
@@ -167,7 +178,7 @@ export function useSessionManager(dept: DeptKind, accessToken?: string | null) {
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, label } : s)))
   }
 
-  function setMeta(id: string, meta: Partial<Pick<Session, 'clientName' | 'phone' | 'vehiclePlate'>>) {
+  function setMeta(id: string, meta: Partial<Pick<Session, 'clientName' | 'customerId' | 'phone' | 'vehicleId' | 'vehiclePlate' | 'responsibleId' | 'status'>>) {
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, ...meta } : s)))
   }
 

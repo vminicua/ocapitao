@@ -20,4 +20,17 @@ class VehicleViewSet(SoftDeleteModelViewSet):
         "destroy": ["admin", "manager"],
     }
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        customer = self.request.query_params.get("customer")
+        search = self.request.query_params.get("search")
+        if customer:
+            queryset = queryset.filter(customer_id=customer)
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(registration_number__icontains=search) | Q(customer__full_name__icontains=search) | Q(customer__phone__icontains=search)
+            )
+        return queryset
+
 # Create your views here.

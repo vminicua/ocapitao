@@ -8,7 +8,7 @@ from barbershop.models import Appointment, Service, ServiceCategory
 from carwash.models import Vehicle
 from customers.models import Customer
 from inventory.models import StockMovement
-from pos.models import CashMovement, CashSession, OperationalSession, Payment, Sale, SaleItem
+from pos.models import CashMovement, CashSession, Commission, OperationalSession, Payment, Sale, SaleItem
 from reports.models import DailySnapshot
 from settings_app.models import Settings
 
@@ -34,6 +34,7 @@ SYNC_MODELS = (
     Sale,
     SaleItem,
     Payment,
+    Commission,
     DailySnapshot,
     Settings,
 )

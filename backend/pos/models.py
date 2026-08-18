@@ -48,16 +48,29 @@ class OperationalSession(SyncableModel):
 
     class Status(models.TextChoices):
         OPEN = "open", "Aberta"
+        WAITING = "waiting", "Aguardando"
+        IN_PROGRESS = "in_progress", "Em atendimento"
+        PAUSED = "paused", "Pausada"
+        READY = "ready", "Pronta"
+        AWAITING_PAYMENT = "awaiting_payment", "Aguardando pagamento"
         COMPLETED = "completed", "Concluída"
         CANCELLED = "cancelled", "Cancelada"
 
     department = models.CharField(max_length=20, choices=Department.choices)
     label = models.CharField(max_length=80)
+    customer = models.ForeignKey(Customer, null=True, blank=True, on_delete=models.SET_NULL, related_name="operational_sessions")
+    responsible = models.ForeignKey(Employee, null=True, blank=True, on_delete=models.SET_NULL, related_name="operational_sessions")
+    vehicle = models.ForeignKey(Vehicle, null=True, blank=True, on_delete=models.SET_NULL, related_name="operational_sessions")
+    appointment = models.ForeignKey(Appointment, null=True, blank=True, on_delete=models.SET_NULL, related_name="operational_sessions")
     client_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=25, blank=True)
     vehicle_plate = models.CharField(max_length=20, blank=True)
     items = models.JSONField(default=list, blank=True)
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    paused_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
 
@@ -184,5 +197,24 @@ class Payment(SyncableModel):
 
     def __str__(self) -> str:
         return f"{self.get_method_display()} - {self.amount}"
+
+
+class Commission(SyncableModel):
+    class Status(models.TextChoices):
+        ACCRUED = "accrued", "Acumulada"
+        PAID = "paid", "Paga"
+        REVERSED = "reversed", "Estornada"
+
+    sale = models.ForeignKey(Sale, on_delete=models.PROTECT, related_name="commissions")
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="commissions")
+    basis_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    rate = models.DecimalField(max_digits=5, decimal_places=2)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACCRUED)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
 # Create your models here.

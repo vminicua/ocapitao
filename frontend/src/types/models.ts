@@ -1,6 +1,7 @@
 export type ModuleId =
   | 'menu'
   | 'dashboard'
+  | 'agenda'
   | 'barbershop'
   | 'bar'
   | 'carwash'
@@ -85,6 +86,10 @@ export interface Customer {
   id: string
   full_name: string
   phone: string
+  email?: string
+  address?: string
+  birth_date?: string | null
+  preferred_barber?: string | null
   loyalty_points: number
   preferred_barber_name?: string
   notes?: string
@@ -95,18 +100,23 @@ export interface Appointment {
   id: string
   department: 'barbershop' | 'carwash'
   customer_name: string
+  customer_id?: string
   employee_name: string
+  employee_id?: string
   service_name: string
+  service_id?: string
   scheduled_for: string
   status: string
   payment_status: string
   walk_in: boolean
   price: number | string
+  notes?: string
 }
 
 export interface Vehicle {
   id: string
   customer_name: string
+  customer_id?: string
   registration_number: string
   brand: string
   model: string
@@ -279,6 +289,9 @@ export interface Transaction {
   id: string
   operational_session_id?: string
   customer_name?: string
+  customer_id?: string
+  vehicle_id?: string
+  responsible_employee_id?: string
   label: string
   source: 'bar' | 'barbershop' | 'carwash'
   items: PosCartItem[]
@@ -296,6 +309,7 @@ export interface SaleRecord {
   department: 'bar' | 'barbershop' | 'carwash'
   label: string
   customer_name: string
+  customer_id?: string
   subtotal: number | string
   discount_amount: number | string
   total_amount: number | string
@@ -324,6 +338,15 @@ export interface SaleRecord {
   }>
 }
 
+export interface EmployeeRecord {
+  id: string
+  department: EmployeeDepartment
+  title?: string
+  commission_rate: number | string
+  is_active_employee: boolean
+  user: { id: number; display_name?: string; first_name: string; last_name: string; email: string }
+}
+
 export interface CashSessionRecord {
   id: string
   opened_at: string
@@ -336,11 +359,28 @@ export interface CashSessionRecord {
   notes?: string
 }
 
+export interface CommissionRecord {
+  id: string
+  sale: string
+  sale_label: string
+  employee: string
+  employee_name: string
+  basis_amount: number | string
+  rate: number | string
+  amount: number | string
+  status: 'accrued' | 'paid' | 'reversed'
+  created_at: string
+}
+
 export interface OperationalSessionRecord {
   id: string
   department: 'bar' | 'barbershop' | 'carwash'
   label: string
   client_name?: string
+  customer?: string | null
+  vehicle?: string | null
+  responsible?: string | null
+  responsible_name?: string
   phone?: string
   vehicle_plate?: string
   items: PosCartItem[]

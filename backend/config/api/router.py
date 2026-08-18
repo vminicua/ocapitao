@@ -6,7 +6,7 @@ from barbershop.views import AppointmentViewSet, ServiceCategoryViewSet, Service
 from carwash.views import VehicleViewSet
 from customers.views import CustomerViewSet
 from inventory.views import StockMovementViewSet
-from pos.views import CashMovementViewSet, CashSessionViewSet, OperationalSessionViewSet, PaymentViewSet, SaleItemViewSet, SaleViewSet
+from pos.views import CashMovementViewSet, CashSessionViewSet, CommissionViewSet, OperationalSessionViewSet, PaymentViewSet, SaleItemViewSet, SaleViewSet
 from reports.views import DailySnapshotViewSet
 from settings_app.views import SettingsViewSet
 from sync.views import SyncLogViewSet, SyncQueueViewSet
@@ -30,6 +30,7 @@ router.register("operational-sessions", OperationalSessionViewSet)
 router.register("sales", SaleViewSet)
 router.register("sale-items", SaleItemViewSet)
 router.register("payments", PaymentViewSet)
+router.register("commissions", CommissionViewSet)
 router.register("daily-snapshots", DailySnapshotViewSet)
 router.register("settings", SettingsViewSet)
 router.register("sync-queue", SyncQueueViewSet)

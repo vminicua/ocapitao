@@ -38,3 +38,24 @@ class CustomerSerializer(SyncableModelSerializer):
             "active",
         ]
         read_only_fields = ["preferred_barber"]
+
+    def validate_phone(self, value):
+        normalized = "".join(character for character in value if character.isdigit() or character == "+")
+        if len(normalized.lstrip("+")) < 8:
+            raise serializers.ValidationError("Introduza um número de telefone válido.")
+        duplicate = Customer.objects.filter(phone=normalized, deleted_at__isnull=True)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError("Já existe um cliente com este telefone.")
+        return normalized
+
+    def validate_email(self, value):
+        if not value:
+            return value
+        duplicate = Customer.objects.filter(email__iexact=value, deleted_at__isnull=True)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError("Já existe um cliente com este email.")
+        return value.lower()

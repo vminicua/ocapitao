@@ -30,6 +30,7 @@ MODEL_ENDPOINTS = {
     "pos.Sale": "sales",
     "pos.SaleItem": "sale-items",
     "pos.Payment": "payments",
+    "pos.Commission": "commissions",
     "reports.DailySnapshot": "daily-snapshots",
     "settings_app.Settings": "settings",
 }

@@ -30,6 +30,12 @@ const moduleCards: Array<{
     tone: 'tone-aqua',
   },
   {
+    id: 'agenda',
+    title: 'Agenda',
+    iconSrc: '/branding/icons/report-svgrepo-com.svg',
+    tone: 'tone-sand',
+  },
+  {
     id: 'caixa',
     title: 'Finanças',
     iconSrc: '/branding/icons/master-card-svgrepo-com.svg',

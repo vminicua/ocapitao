@@ -1,4 +1,7 @@
 from rest_framework import serializers
+from django.db.models import Q
+from django.utils import timezone
+from datetime import timedelta
 
 from accounts.models import Employee
 from config.common.serializers import SyncableModelSerializer
@@ -151,4 +154,21 @@ class AppointmentSerializer(SyncableModelSerializer):
         service = attrs.get("service") or getattr(self.instance, "service", None)
         if department and service and department != service.department:
             raise serializers.ValidationError("O serviço escolhido não corresponde ao módulo selecionado.")
+        employee = attrs.get("employee") or getattr(self.instance, "employee", None)
+        scheduled_for = attrs.get("scheduled_for") or getattr(self.instance, "scheduled_for", None)
+        target_status = attrs.get("status") or getattr(self.instance, "status", Appointment.Status.SCHEDULED)
+        is_active_booking = target_status in [Appointment.Status.SCHEDULED, Appointment.Status.IN_PROGRESS]
+        if is_active_booking and scheduled_for and scheduled_for < timezone.now() and not attrs.get("walk_in", getattr(self.instance, "walk_in", False)):
+            raise serializers.ValidationError({"scheduled_for": "A marcação não pode ser criada no passado."})
+        if is_active_booking and employee and service and scheduled_for:
+            end = scheduled_for + timedelta(minutes=service.duration_minutes)
+            conflicts = Appointment.objects.filter(
+                employee=employee,
+                status__in=[Appointment.Status.SCHEDULED, Appointment.Status.IN_PROGRESS],
+                scheduled_for__lt=end,
+            ).filter(scheduled_for__gte=scheduled_for - timedelta(minutes=service.duration_minutes))
+            if self.instance:
+                conflicts = conflicts.exclude(pk=self.instance.pk)
+            if conflicts.exists():
+                raise serializers.ValidationError({"scheduled_for": "O colaborador já possui uma marcação neste horário."})
         return attrs

@@ -6,7 +6,7 @@ import { ClientAutocomplete } from '../../components/shared/ClientAutocomplete'
 import { SplitMergeModal } from '../../components/modals/SplitMergeModal'
 import { formatCurrency, toNumber } from '../../lib/formatters'
 import { useSessionManager } from '../../lib/useSessionManager'
-import type { Appointment, Customer, PosCartItem, Product, Service, Transaction, Vehicle } from '../../types/models'
+import type { Appointment, Customer, EmployeeRecord, PosCartItem, Product, Service, Transaction, Vehicle } from '../../types/models'
 
 interface CarwashViewProps {
   accessToken: string
@@ -15,6 +15,7 @@ interface CarwashViewProps {
   products: Product[]
   services: Service[]
   vehicles: Vehicle[]
+  employees: EmployeeRecord[]
   onTransactionComplete: (transaction: Transaction) => Promise<void>
 }
 
@@ -33,6 +34,8 @@ export function CarwashView({
   customers,
   products,
   services,
+  vehicles,
+  employees,
   onTransactionComplete,
 }: CarwashViewProps) {
   const sm = useSessionManager('carwash', accessToken)
@@ -112,6 +115,9 @@ export function CarwashView({
       id: `txn-cw-${Date.now()}`,
       operational_session_id: sm.active.id,
       customer_name: sm.active.clientName,
+      customer_id: sm.active.customerId,
+      vehicle_id: sm.active.vehicleId,
+      responsible_employee_id: sm.active.responsibleId,
       label: displayLabel,
       source: 'carwash',
       items: sm.active.items,
@@ -300,6 +306,13 @@ export function CarwashView({
           </div>
 
           <div className="dept-cart-meta">
+            <select className="touch-input" value={sm.active.vehicleId ?? ''} onChange={(e) => {
+              const vehicle = vehicles.find((item) => item.id === e.target.value)
+              sm.setMeta(sm.activeId, { vehicleId: vehicle?.id, vehiclePlate: vehicle?.registration_number ?? '', customerId: vehicle?.customer_id, clientName: vehicle?.customer_name ?? '' })
+            }}>
+              <option value="">Selecionar viatura cadastrada</option>
+              {vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.registration_number || 'Sem matrícula'} · {vehicle.brand} {vehicle.model} · {vehicle.customer_name}</option>)}
+            </select>
             <input
               type="text"
               className="touch-input"
@@ -310,11 +323,16 @@ export function CarwashView({
             />
             <ClientAutocomplete
               value={sm.active.clientName ?? ''}
-              onChange={(name) => sm.setMeta(sm.activeId, { clientName: name })}
+              onChange={(name, customer) => sm.setMeta(sm.activeId, { clientName: name, customerId: customer?.id })}
               customers={customers}
               placeholder="Nome do cliente (opcional)"
               className="mt-4"
             />
+            <select className="touch-input" value={sm.active.responsibleId ?? ''} onChange={(e) => sm.setMeta(sm.activeId, { responsibleId: e.target.value || undefined })}>
+              <option value="">Técnico responsável</option>
+              {employees.filter(e => e.is_active_employee && (e.department === 'carwash' || e.department === 'management')).map(e => <option key={e.id} value={e.id}>{e.user.display_name || e.user.email}</option>)}
+            </select>
+            <select className="touch-input" value={sm.active.status ?? 'waiting'} onChange={(e) => sm.setMeta(sm.activeId, { status: e.target.value as typeof sm.active.status })}><option value="waiting">Aguardando</option><option value="in_progress">Em lavagem</option><option value="paused">Pausada</option><option value="ready">Pronta</option><option value="awaiting_payment">Aguardando pagamento</option></select>
           </div>
 
           <div className="dept-cart-items">

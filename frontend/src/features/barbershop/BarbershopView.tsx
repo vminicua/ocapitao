@@ -6,12 +6,13 @@ import { ClientAutocomplete } from '../../components/shared/ClientAutocomplete'
 import { SplitMergeModal } from '../../components/modals/SplitMergeModal'
 import { formatCurrency, toNumber } from '../../lib/formatters'
 import { useSessionManager } from '../../lib/useSessionManager'
-import type { Appointment, Customer, PosCartItem, Product, Service, Transaction } from '../../types/models'
+import type { Appointment, Customer, EmployeeRecord, PosCartItem, Product, Service, Transaction } from '../../types/models'
 
 interface BarbershopViewProps {
   accessToken: string
   appointments: Appointment[]
   customers: Customer[]
+  employees: EmployeeRecord[]
   products: Product[]
   services: Service[]
   onTransactionComplete: (transaction: Transaction) => Promise<void>
@@ -31,6 +32,7 @@ export function BarbershopView({
   accessToken,
   appointments,
   customers,
+  employees,
   products,
   services,
   onTransactionComplete,
@@ -111,6 +113,8 @@ export function BarbershopView({
       id: `txn-bs-${Date.now()}`,
       operational_session_id: sm.active.id,
       customer_name: sm.active.clientName,
+      customer_id: sm.active.customerId,
+      responsible_employee_id: sm.active.responsibleId,
       label: sm.active.clientName
         ? `${sm.active.label} — ${sm.active.clientName}`
         : sm.active.label,
@@ -312,10 +316,15 @@ export function BarbershopView({
           <div className="dept-cart-meta">
             <ClientAutocomplete
               value={sm.active.clientName ?? ''}
-              onChange={(name) => sm.setMeta(sm.activeId, { clientName: name })}
+              onChange={(name, customer) => sm.setMeta(sm.activeId, { clientName: name, customerId: customer?.id })}
               customers={customers}
               placeholder="Nome do cliente (opcional)"
             />
+            <select className="touch-input" value={sm.active.responsibleId ?? ''} onChange={(e) => sm.setMeta(sm.activeId, { responsibleId: e.target.value || undefined })}>
+              <option value="">Barbeiro responsável</option>
+              {employees.filter(e => e.is_active_employee && (e.department === 'barbershop' || e.department === 'management')).map(e => <option key={e.id} value={e.id}>{e.user.display_name || e.user.email}</option>)}
+            </select>
+            <select className="touch-input" value={sm.active.status ?? 'open'} onChange={(e) => sm.setMeta(sm.activeId, { status: e.target.value as typeof sm.active.status })}><option value="waiting">Aguardando</option><option value="in_progress">Em atendimento</option><option value="paused">Pausado</option><option value="awaiting_payment">Aguardando pagamento</option></select>
             <input
               type="tel"
               className="touch-input"

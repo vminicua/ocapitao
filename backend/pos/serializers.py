@@ -14,7 +14,7 @@ from customers.models import Customer
 from inventory.models import StockMovement
 from settings_app.models import Settings
 
-from .models import CashMovement, CashSession, OperationalSession, Payment, Sale, SaleItem
+from .models import CashMovement, CashSession, Commission, OperationalSession, Payment, Sale, SaleItem
 
 
 PAYMENT_METHOD_ALIASES = {
@@ -27,6 +27,13 @@ PAYMENT_METHOD_ALIASES = {
 
 
 class OperationalSessionSerializer(SyncableModelSerializer):
+    customer_id = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all(), source="customer", allow_null=True, required=False)
+    responsible_id = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all(), source="responsible", allow_null=True, required=False)
+    vehicle_id = serializers.PrimaryKeyRelatedField(queryset=Vehicle.objects.all(), source="vehicle", allow_null=True, required=False)
+    appointment_id = serializers.PrimaryKeyRelatedField(queryset=Appointment.objects.all(), source="appointment", allow_null=True, required=False)
+    customer_display = serializers.CharField(source="customer.full_name", read_only=True)
+    responsible_name = serializers.CharField(source="responsible.user.get_full_name", read_only=True)
+
     class Meta:
         model = OperationalSession
         fields = "__all__"
@@ -221,11 +228,13 @@ class CompleteSaleSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=150, required=False, allow_blank=True)
     customer_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     customer_id = serializers.UUIDField(required=False, allow_null=True)
+    vehicle_id = serializers.UUIDField(required=False, allow_null=True)
     discount_amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"), default=0)
     payment_method = serializers.CharField(max_length=30)
     payment_reference = serializers.CharField(max_length=100, required=False, allow_blank=True)
     notes = serializers.CharField(required=False, allow_blank=True)
     operational_session_id = serializers.UUIDField(required=False, allow_null=True)
+    responsible_employee_id = serializers.UUIDField(required=False, allow_null=True)
     items = CompleteSaleItemSerializer(many=True, allow_empty=False)
 
     def validate_payment_method(self, value):
@@ -244,7 +253,9 @@ class CompleteSaleSerializer(serializers.Serializer):
         request = self.context["request"]
         item_payloads = validated_data.pop("items")
         customer_id = validated_data.pop("customer_id", None)
+        vehicle_id = validated_data.pop("vehicle_id", None)
         operational_session_id = validated_data.pop("operational_session_id", None)
+        responsible_employee_id = validated_data.pop("responsible_employee_id", None)
         payment_method = validated_data.pop("payment_method")
         payment_reference = validated_data.pop("payment_reference", "")
         discount = validated_data.pop("discount_amount", Decimal("0"))
@@ -257,10 +268,25 @@ class CompleteSaleSerializer(serializers.Serializer):
             raise serializers.ValidationError({"cash_session": "Abra o caixa antes de concluir uma venda."})
 
         customer = Customer.objects.filter(pk=customer_id, deleted_at__isnull=True).first() if customer_id else None
-        seller = getattr(request.user, "employee_profile", None)
+        selected_vehicle = Vehicle.objects.filter(pk=vehicle_id, deleted_at__isnull=True).first() if vehicle_id else None
+        operational_session = None
+        if operational_session_id:
+            operational_session = OperationalSession.objects.select_for_update().filter(
+                pk=operational_session_id, status__in=[
+                    OperationalSession.Status.OPEN, OperationalSession.Status.WAITING,
+                    OperationalSession.Status.IN_PROGRESS, OperationalSession.Status.PAUSED,
+                    OperationalSession.Status.READY, OperationalSession.Status.AWAITING_PAYMENT,
+                ]
+            ).first()
+        selected_responsible = Employee.objects.filter(pk=responsible_employee_id, is_active_employee=True).first() if responsible_employee_id else None
+        seller = selected_responsible or (operational_session.responsible if operational_session and operational_session.responsible else getattr(request.user, "employee_profile", None))
+        if operational_session:
+            customer = operational_session.customer or customer
         sale = Sale.objects.create(
             session=cash_session,
             customer=customer,
+            vehicle=selected_vehicle or (operational_session.vehicle if operational_session else None),
+            appointment=operational_session.appointment if operational_session else None,
             seller=seller,
             discount_amount=discount,
             status=Sale.Status.DRAFT,
@@ -330,6 +356,14 @@ class CompleteSaleSerializer(serializers.Serializer):
         sale.save(update_fields=[
             "subtotal", "total_amount", "amount_paid", "balance_due", "payment_status", "status", "updated_at",
         ])
+        if seller and seller.commission_rate > 0:
+            Commission.objects.create(
+                sale=sale,
+                employee=seller,
+                basis_amount=sale.total_amount,
+                rate=seller.commission_rate,
+                amount=(sale.total_amount * seller.commission_rate / Decimal("100")).quantize(Decimal("0.01")),
+            )
 
         if not is_credit:
             method = PAYMENT_METHOD_ALIASES.get(payment_method, payment_method)
@@ -341,12 +375,29 @@ class CompleteSaleSerializer(serializers.Serializer):
                 reference=payment_reference,
             )
 
-        if operational_session_id:
-            OperationalSession.objects.filter(pk=operational_session_id).update(
+        if operational_session:
+            OperationalSession.objects.filter(pk=operational_session.id).update(
                 status=OperationalSession.Status.COMPLETED,
+                completed_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+        if sale.appointment_id:
+            Appointment.objects.filter(pk=sale.appointment_id).update(
+                status=Appointment.Status.COMPLETED,
+                payment_status=Appointment.PaymentStatus.PAID if sale.payment_status == Sale.PaymentStatus.PAID else Appointment.PaymentStatus.PENDING,
                 updated_at=timezone.now(),
             )
         return sale
+
+
+class CommissionSerializer(SyncableModelSerializer):
+    employee_name = serializers.CharField(source="employee.user.get_full_name", read_only=True)
+    sale_label = serializers.CharField(source="sale.label", read_only=True)
+
+    class Meta:
+        model = Commission
+        fields = "__all__"
+        read_only_fields = ["sale", "employee", "basis_amount", "rate", "amount"]
 
 
 class SaleItemSerializer(SyncableModelSerializer):

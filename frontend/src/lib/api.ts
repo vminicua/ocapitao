@@ -4,6 +4,7 @@ import type {
   AuthSession,
   AuthUser,
   Customer,
+  EmployeeRecord,
   DashboardSummary,
   LoginUserOption,
   PermissionDefinition,
@@ -12,6 +13,7 @@ import type {
   RoleRecord,
   SaleRecord,
   CashSessionRecord,
+  CommissionRecord,
   OperationalSessionRecord,
   Service,
   ServiceCategory,
@@ -150,6 +152,10 @@ export function getSales(accessToken: string) {
   return requestList<SaleRecord>('/sales/?status=completed', accessToken)
 }
 
+export function getCommissions(accessToken: string) {
+  return requestList<CommissionRecord>('/commissions/', accessToken)
+}
+
 export function completeSale(accessToken: string, payload: JsonRecord) {
   return createRecord<SaleRecord>('/sales/complete/', payload, accessToken)
 }
@@ -206,8 +212,32 @@ export function getAppointments(accessToken: string) {
   return requestList<Appointment>('/appointments/', accessToken)
 }
 
+export function createAppointment(accessToken: string, payload: JsonRecord) {
+  return createRecord<Appointment>('/appointments/', payload, accessToken)
+}
+
+export function updateAppointment(accessToken: string, appointmentId: string, payload: JsonRecord) {
+  return updateRecord<Appointment>('/appointments/', appointmentId, payload, accessToken)
+}
+
+export function startAppointment(accessToken: string, appointmentId: string) {
+  return createRecord<{ appointment: Appointment; operational_session_id: string }>(`/appointments/${appointmentId}/start/`, {}, accessToken)
+}
+
+export function getEmployees(accessToken: string) {
+  return requestList<EmployeeRecord>('/employees/', accessToken)
+}
+
 export function getVehicles(accessToken: string) {
   return requestList<Vehicle>('/vehicles/', accessToken)
+}
+
+export function createVehicle(accessToken: string, payload: JsonRecord) {
+  return createRecord<Vehicle>('/vehicles/', payload, accessToken)
+}
+
+export function updateVehicle(accessToken: string, vehicleId: string, payload: JsonRecord) {
+  return updateRecord<Vehicle>('/vehicles/', vehicleId, payload, accessToken)
 }
 
 export async function getSettings(accessToken: string) {

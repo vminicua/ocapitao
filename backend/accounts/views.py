@@ -94,8 +94,8 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated, RoleBasedPermission]
     allowed_permissions = {
-        "list": ["users.view", "users.manage"],
-        "retrieve": ["users.view", "users.manage"],
+        "list": ["users.view", "users.manage", "barbershop.view", "barbershop.manage", "bar.view", "bar.manage", "carwash.view", "carwash.manage"],
+        "retrieve": ["users.view", "users.manage", "barbershop.view", "barbershop.manage", "bar.view", "bar.manage", "carwash.view", "carwash.manage"],
         "create": ["users.manage"],
         "update": ["users.manage"],
         "partial_update": ["users.manage"],

@@ -3,11 +3,11 @@ from decimal import Decimal
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounts.models import Permission, Role, User
+from accounts.models import Employee, Permission, Role, User
 from bar.models import Product, ProductCategory
 from inventory.models import StockMovement
 
-from .models import CashSession, OperationalSession, Payment, Sale
+from .models import CashSession, Commission, OperationalSession, Payment, Sale
 
 
 class CompleteSaleTests(APITestCase):
@@ -160,3 +160,18 @@ class CompleteSaleTests(APITestCase):
         )
         self.assertEqual(cleared.status_code, status.HTTP_200_OK)
         self.assertEqual(OperationalSession.objects.get(pk=session_id).status, OperationalSession.Status.CANCELLED)
+
+    def test_sale_generates_and_cancellation_reverses_commission(self):
+        employee = Employee.objects.create(
+            user=self.user, department=Employee.Department.BAR, commission_rate=Decimal("10.00")
+        )
+        self.open_cash()
+        payload = self.sale_payload()
+        payload["responsible_employee_id"] = str(employee.id)
+        created = self.client.post("/api/sales/complete/", payload, format="json")
+        commission = Commission.objects.get(sale_id=created.data["id"])
+        self.assertEqual(commission.amount, Decimal("14.00"))
+
+        self.client.post(f"/api/sales/{created.data['id']}/cancel/", {}, format="json")
+        commission.refresh_from_db()
+        self.assertEqual(commission.status, Commission.Status.REVERSED)
