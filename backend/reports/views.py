@@ -60,7 +60,7 @@ class DailySnapshotViewSet(SoftDeleteModelViewSet):
     queryset = DailySnapshot.objects.all()
     serializer_class = DailySnapshotSerializer
     permission_classes = [IsAuthenticated, RoleBasedPermission]
-    allowed_roles = {"*": ["admin", "manager"]}
+    allowed_permissions = {"list": ["reports.view"], "retrieve": ["reports.view"], "create": ["reports.export"], "update": ["reports.export"], "partial_update": ["reports.export"], "destroy": ["reports.export"]}
 
 
 class AnalyticsView(APIView):
@@ -100,6 +100,9 @@ class AnalyticsView(APIView):
             "commissions": commissions,
         }
         if request.query_params.get("export") == "csv":
+            if not RoleBasedPermission.user_has_any(request.user, ["reports.export"]):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("O seu perfil não pode exportar relatórios.")
             response = HttpResponse(content_type="text/csv; charset=utf-8")
             response["Content-Disposition"] = f'attachment; filename="relatorio-{date_from}-{date_to}.csv"'
             writer = csv.writer(response)

@@ -222,31 +222,30 @@ function hasAnyPermission(user: AuthUser | null, permissionCodes: string[]) {
 }
 
 function getVisibleModules(user: AuthUser | null, settings: AppSettings): Array<Exclude<ModuleId, 'menu'>> {
-  const modules: Array<Exclude<ModuleId, 'menu'>> = ['dashboard']
+  const modules: Array<Exclude<ModuleId, 'menu'>> = []
 
-  if (settings.enable_barbershop_module) {
+  if (hasAnyPermission(user, ['dashboard.view'])) modules.push('dashboard')
+  if (settings.enable_barbershop_module && hasAnyPermission(user, ['barbershop.view', 'barbershop.manage'])) {
     modules.push('barbershop')
   }
-  if (settings.enable_bar_module) {
+  if (settings.enable_bar_module && hasAnyPermission(user, ['bar.view', 'bar.manage'])) {
     modules.push('bar')
   }
-  if (settings.enable_carwash_module) {
+  if (settings.enable_carwash_module && hasAnyPermission(user, ['carwash.view', 'carwash.manage'])) {
     modules.push('carwash')
   }
-  if (settings.enable_pos_module) {
+  if (settings.enable_pos_module && hasAnyPermission(user, ['pos.view', 'pos.manage'])) {
     modules.push('caixa')
   }
   if (hasAnyPermission(user, ['inventory.view', 'inventory.manage'])) {
     modules.push('stock')
   }
-  if (user) {
-    modules.push('agenda')
-    modules.push('customers')
-  }
-  if (settings.enable_reports_module) {
+  if (hasAnyPermission(user, ['appointments.view', 'appointments.manage'])) modules.push('agenda')
+  if (hasAnyPermission(user, ['customers.view', 'customers.manage', 'vehicles.view', 'vehicles.manage'])) modules.push('customers')
+  if (settings.enable_reports_module && hasAnyPermission(user, ['reports.view'])) {
     modules.push('reports')
   }
-  if (hasAnyPermission(user, ['settings.view', 'settings.manage', 'users.view', 'users.manage'])) {
+  if (hasAnyPermission(user, ['settings.view', 'settings.manage', 'users.view', 'users.manage', 'loyalty.view', 'promotions.view', 'promotions.manage'])) {
     modules.push('settings')
   }
 
@@ -450,6 +449,14 @@ function App() {
   const canManageSettings = hasAnyPermission(session.user, ['settings.manage'])
   const canManageUsers = hasAnyPermission(session.user, ['users.manage'])
   const canManageStock = hasAnyPermission(session.user, ['inventory.manage'])
+  const canViewPurchases = hasAnyPermission(session.user, ['purchases.view', 'purchases.manage'])
+  const canManagePurchases = hasAnyPermission(session.user, ['purchases.manage'])
+  const canCancelSales = hasAnyPermission(session.user, ['sales.cancel'])
+  const canApplyDiscount = hasAnyPermission(session.user, ['sales.discount'])
+  const canManageCustomers = hasAnyPermission(session.user, ['customers.manage'])
+  const canManageAppointments = hasAnyPermission(session.user, ['appointments.manage'])
+  const canExportReports = hasAnyPermission(session.user, ['reports.export'])
+  const canManageLoyalty = hasAnyPermission(session.user, ['promotions.manage', 'loyalty.adjust'])
 
   useEffect(() => {
     if (activeModule === 'menu') {
@@ -658,6 +665,7 @@ function App() {
       case 'barbershop':
         return (
           <BarbershopView
+            canApplyDiscount={canApplyDiscount}
             accessToken={session.accessToken!}
             appointments={appData.appointments}
             customers={appData.customers}
@@ -670,6 +678,7 @@ function App() {
       case 'bar':
         return (
           <BarView
+            canApplyDiscount={canApplyDiscount}
             accessToken={session.accessToken!}
             products={appData.products.filter((product) => product.department === 'bar')}
             customers={appData.customers}
@@ -680,6 +689,7 @@ function App() {
       case 'carwash':
         return (
           <CarwashView
+            canApplyDiscount={canApplyDiscount}
             accessToken={session.accessToken!}
             appointments={appData.appointments}
             customers={appData.customers}
@@ -700,7 +710,7 @@ function App() {
             onCloseCash={handleCloseCash}
             onCancelTransaction={handleCancelTransaction}
             onMarkAsPaid={handleMarkAsPaid}
-            canCancel={canManageSettings}
+            canCancel={canCancelSales}
           />
         )
       case 'stock':
@@ -712,6 +722,8 @@ function App() {
             movements={appData.stockMovements}
             products={appData.products}
             canManageStock={canManageStock}
+            canViewPurchases={canViewPurchases}
+            canManagePurchases={canManagePurchases}
             onDeleteMovement={(movementId) =>
               runWithReload((accessToken) => deleteStockMovement(accessToken, movementId))
             }
@@ -737,7 +749,7 @@ function App() {
             appointments={appData.appointments}
             vehicles={appData.vehicles}
             employees={appData.employees}
-            canManage={Boolean(session.user)}
+            canManage={canManageCustomers}
             onSaveCustomer={(payload, customerId) =>
               runWithReload((accessToken) =>
                 customerId
@@ -751,16 +763,17 @@ function App() {
       case 'agenda':
         return (
           <AgendaView
+            canManage={canManageAppointments}
             appointments={appData.appointments}
             customers={appData.customers}
             employees={appData.employees}
             services={appData.services}
-            onSave={(payload, id) => runWithReload((token) => id ? updateAppointment(token, id, payload) : createAppointment(token, payload))}
-            onStart={(id) => runWithReload((token) => startAppointment(token, id))}
+            onSave={(payload, id) => canManageAppointments ? runWithReload((token) => id ? updateAppointment(token, id, payload) : createAppointment(token, payload)) : Promise.reject(new Error('Sem permissão para gerir agenda.'))}
+            onStart={(id) => canManageAppointments ? runWithReload((token) => startAppointment(token, id)) : Promise.reject(new Error('Sem permissão para iniciar atendimentos.'))}
           />
         )
       case 'reports':
-        return <ReportsView appointments={appData.appointments} commissions={appData.commissions} dashboard={appData.dashboard} accessToken={session.accessToken ?? ''} />
+        return <ReportsView appointments={appData.appointments} commissions={appData.commissions} dashboard={appData.dashboard} accessToken={session.accessToken ?? ''} canExport={canExportReports} />
       case 'settings':
         return (
           <SettingsView
@@ -777,6 +790,7 @@ function App() {
             users={appData.users}
             canManageSettings={canManageSettings}
             canManageUsers={canManageUsers}
+            canManageLoyalty={canManageLoyalty}
             onDeactivateUser={(userId) => runWithReload((accessToken) => deactivateUser(accessToken, userId))}
             onCreateBackup={() => runWithReload((token) => createBackup(token))}
             onRestoreBackup={(file) => runWithReload((token) => restoreBackup(token, file))}

@@ -107,13 +107,10 @@ class AppointmentViewSet(SoftDeleteModelViewSet):
     queryset = Appointment.objects.select_related("customer", "employee__user", "service").all()
     serializer_class = AppointmentSerializer
     permission_classes = [IsAuthenticated, RoleBasedPermission]
-    allowed_roles = {
-        "list": ["admin", "manager", "barber", "cashier", "washer"],
-        "retrieve": ["admin", "manager", "barber", "cashier", "washer"],
-        "create": ["admin", "manager", "barber", "cashier", "washer"],
-        "update": ["admin", "manager", "barber", "cashier", "washer"],
-        "partial_update": ["admin", "manager", "barber", "cashier", "washer"],
-        "destroy": ["admin", "manager"],
+    allowed_permissions = {
+        "list": ["appointments.view", "appointments.manage"], "retrieve": ["appointments.view", "appointments.manage"],
+        "create": ["appointments.manage"], "update": ["appointments.manage"], "partial_update": ["appointments.manage"],
+        "destroy": ["appointments.manage"], "start": ["appointments.manage"],
     }
 
     def get_queryset(self):

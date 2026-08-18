@@ -30,7 +30,7 @@ class OperationalSessionViewSet(SoftDeleteModelViewSet):
     queryset = OperationalSession.objects.select_related("created_by").all()
     serializer_class = OperationalSessionSerializer
     permission_classes = [IsAuthenticated, RoleBasedPermission]
-    allowed_permissions = {"*": ["pos.view", "pos.manage"], "snapshot": ["pos.manage"]}
+    allowed_permissions = {"list": ["pos.view", "pos.manage"], "retrieve": ["pos.view", "pos.manage"], "create": ["pos.manage"], "update": ["pos.manage"], "partial_update": ["pos.manage"], "destroy": ["pos.manage"], "snapshot": ["pos.manage"], "transition": ["pos.manage"]}
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -200,7 +200,7 @@ class SaleViewSet(SoftDeleteModelViewSet):
         "destroy": ["pos.manage"],
         "complete": ["pos.manage"],
         "receive_payment": ["pos.manage"],
-        "cancel": ["pos.manage"],
+        "cancel": ["sales.cancel"],
         "receipt": ["pos.view", "pos.manage"],
     }
 

@@ -30,6 +30,8 @@ interface StockViewProps {
   movements: StockMovement[]
   currentUser: AuthUser | null
   canManageStock: boolean
+  canViewPurchases: boolean
+  canManagePurchases: boolean
   onSaveCategory: (payload: Record<string, unknown>, categoryId?: string) => Promise<unknown>
   onSaveProduct: (payload: Record<string, unknown>, productId?: string) => Promise<unknown>
   onSaveMovement: (payload: Record<string, unknown>) => Promise<unknown>
@@ -212,6 +214,8 @@ export function StockView({
   movements,
   currentUser,
   canManageStock,
+  canViewPurchases,
+  canManagePurchases,
   onSaveCategory,
   onSaveProduct,
   onSaveMovement,
@@ -540,7 +544,7 @@ export function StockView({
             <strong className="stock-nav-card__title">Movimentos</strong>
             <p className="stock-nav-card__desc">Registo de entradas, saídas e ajustes de inventário</p>
           </button>
-          <button type="button" className="stock-nav-card tone-sky" onClick={() => navigateTo('advanced')}><div className="stock-nav-card__icon">📦</div><p className="stock-nav-card__count">PRO</p><strong className="stock-nav-card__title">Compras e armazéns</strong><p className="stock-nav-card__desc">Fornecedores, encomendas, receções, localizações, lotes e contagens</p></button>
+          {canViewPurchases && <button type="button" className="stock-nav-card tone-sky" onClick={() => navigateTo('advanced')}><div className="stock-nav-card__icon">📦</div><p className="stock-nav-card__count">PRO</p><strong className="stock-nav-card__title">Compras e armazéns</strong><p className="stock-nav-card__desc">Fornecedores, encomendas, receções, localizações, lotes e contagens</p></button>}
         </div>
 
         {allLowStockItems.length > 0 && (
@@ -580,7 +584,7 @@ export function StockView({
     )
   }
 
-  if (subView === 'advanced') return <InventoryAdvanced accessToken={accessToken} products={products} onBack={goToMenu} />
+  if (subView === 'advanced' && canViewPurchases) return <InventoryAdvanced accessToken={accessToken} products={products} canManage={canManagePurchases} onBack={goToMenu} />
 
   // =================== PRODUCTS VIEW ===================
   if (subView === 'products') {

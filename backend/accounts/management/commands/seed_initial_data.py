@@ -30,6 +30,23 @@ class Command(BaseCommand):
             ("users", "users.manage", "Gerir utilizadores"),
             ("settings", "settings.view", "Consultar configurações"),
             ("settings", "settings.manage", "Gerir configurações"),
+            ("customers", "customers.view", "Consultar clientes"),
+            ("customers", "customers.manage", "Gerir clientes"),
+            ("appointments", "appointments.view", "Consultar agenda"),
+            ("appointments", "appointments.manage", "Gerir agenda"),
+            ("vehicles", "vehicles.view", "Consultar viaturas"),
+            ("vehicles", "vehicles.manage", "Gerir viaturas"),
+            ("purchases", "purchases.view", "Consultar fornecedores e compras"),
+            ("purchases", "purchases.manage", "Gerir fornecedores e compras"),
+            ("inventory", "stock.count", "Executar e aprovar contagens de stock"),
+            ("inventory", "stock.transfer", "Transferir stock entre localizações"),
+            ("loyalty", "loyalty.view", "Consultar fidelização"),
+            ("loyalty", "loyalty.adjust", "Ajustar pontos de fidelização"),
+            ("promotions", "promotions.view", "Consultar promoções"),
+            ("promotions", "promotions.manage", "Gerir promoções"),
+            ("sales", "sales.cancel", "Cancelar vendas"),
+            ("sales", "sales.discount", "Aplicar descontos manuais"),
+            ("reports", "reports.export", "Exportar relatórios"),
         ]
 
         permissions = {}
@@ -66,6 +83,10 @@ class Command(BaseCommand):
                     "users.view",
                     "settings.view",
                     "settings.manage",
+                    "customers.view", "customers.manage", "appointments.view", "appointments.manage",
+                    "vehicles.view", "vehicles.manage", "purchases.view", "purchases.manage", "stock.count",
+                    "stock.transfer", "loyalty.view", "loyalty.adjust", "promotions.view", "promotions.manage",
+                    "sales.cancel", "sales.discount", "reports.export",
                 ],
             },
             "barber": {
@@ -79,6 +100,7 @@ class Command(BaseCommand):
                     "pos.view",
                     "pos.manage",
                     "reports.view",
+                    "customers.view", "customers.manage", "appointments.view", "appointments.manage", "loyalty.view",
                 ],
             },
             "cashier": {
@@ -92,6 +114,8 @@ class Command(BaseCommand):
                     "pos.manage",
                     "inventory.view",
                     "sync.manage",
+                    "customers.view", "customers.manage", "appointments.view", "appointments.manage",
+                    "vehicles.view", "vehicles.manage", "loyalty.view",
                 ],
             },
             "washer": {
@@ -104,6 +128,8 @@ class Command(BaseCommand):
                     "inventory.view",
                     "pos.view",
                     "pos.manage",
+                    "customers.view", "customers.manage", "appointments.view", "appointments.manage",
+                    "vehicles.view", "vehicles.manage",
                 ],
             },
         }

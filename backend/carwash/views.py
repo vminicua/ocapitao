@@ -11,13 +11,10 @@ class VehicleViewSet(SoftDeleteModelViewSet):
     queryset = Vehicle.objects.select_related("customer").all()
     serializer_class = VehicleSerializer
     permission_classes = [IsAuthenticated, RoleBasedPermission]
-    allowed_roles = {
-        "list": ["admin", "manager", "washer", "cashier"],
-        "retrieve": ["admin", "manager", "washer", "cashier"],
-        "create": ["admin", "manager", "washer", "cashier"],
-        "update": ["admin", "manager", "washer", "cashier"],
-        "partial_update": ["admin", "manager", "washer", "cashier"],
-        "destroy": ["admin", "manager"],
+    allowed_permissions = {
+        "list": ["vehicles.view", "vehicles.manage"], "retrieve": ["vehicles.view", "vehicles.manage"],
+        "create": ["vehicles.manage"], "update": ["vehicles.manage"], "partial_update": ["vehicles.manage"],
+        "destroy": ["vehicles.manage"],
     }
 
     def get_queryset(self):

@@ -14,6 +14,7 @@ interface BarViewProps {
   customers: Customer[]
   employees: EmployeeRecord[]
   onTransactionComplete: (transaction: Transaction) => Promise<void>
+  canApplyDiscount: boolean
 }
 
 const CARD_TONES = [
@@ -32,7 +33,7 @@ function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {
   }, {})
 }
 
-export function BarView({ accessToken, products, customers, employees, onTransactionComplete }: BarViewProps) {
+export function BarView({ accessToken, products, customers, employees, onTransactionComplete, canApplyDiscount }: BarViewProps) {
   const sm = useSessionManager('bar', accessToken)
   const [search, setSearch] = useState('')
   const [showCalc, setShowCalc] = useState(false)
@@ -292,6 +293,7 @@ export function BarView({ accessToken, products, customers, employees, onTransac
               max={subtotal}
               value={sm.active.discount || ''}
               placeholder="0"
+              disabled={!canApplyDiscount}
               onChange={(e) => sm.setDiscount(sm.activeId, toNumber(e.target.value))}
               style={{ width: '120px', textAlign: 'right' }}
             />

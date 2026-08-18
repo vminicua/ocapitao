@@ -114,6 +114,7 @@ class ServiceCatalogTests(APITestCase):
 class AppointmentOperationsTests(APITestCase):
     def setUp(self):
         role = Role.objects.create(code="admin", name="Administrador Agenda")
+        role.permissions.add(Permission.objects.get(code="appointments.manage"))
         self.user = User.objects.create_user(email="agenda@test.local", password="1122", role=role)
         self.employee = Employee.objects.create(user=self.user, department=Employee.Department.BARBERSHOP)
         self.customer = Customer.objects.create(full_name="Ana Agenda", phone="841234567")

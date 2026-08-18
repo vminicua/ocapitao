@@ -9,11 +9,12 @@ interface Props {
   services: Service[]
   onSave: (payload: Record<string, unknown>, id?: string) => Promise<unknown>
   onStart: (id: string) => Promise<unknown>
+  canManage: boolean
 }
 
 const empty = { id: '', department: 'barbershop', customer_id: '', employee_id: '', service_id: '', scheduled_for: '', notes: '', walk_in: false, status: 'scheduled' }
 
-export function AgendaView({ appointments, customers, employees, services, onSave, onStart }: Props) {
+export function AgendaView({ appointments, customers, employees, services, onSave, onStart, canManage }: Props) {
   const [form, setForm] = useState<typeof empty | null>(null)
   const [department, setDepartment] = useState('all')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
@@ -47,7 +48,7 @@ export function AgendaView({ appointments, customers, employees, services, onSav
   }
 
   return <section className="module-layout">
-    <div className="module-header"><div><p className="eyebrow">Agenda</p><h3 className="section-title">Marcações e atendimentos</h3></div><button className="primary-button" onClick={() => setForm({ ...empty })}>+ Nova marcação</button></div>
+    <div className="module-header"><div><p className="eyebrow">Agenda</p><h3 className="section-title">Marcações e atendimentos</h3></div>{canManage && <button className="primary-button" onClick={() => setForm({ ...empty })}>+ Nova marcação</button>}</div>
     <div className="chip-group">
       {['all', 'barbershop', 'carwash'].map((value) => <button key={value} className={`chip-button${department === value ? ' is-selected' : ''}`} onClick={() => setDepartment(value)}>{value === 'all' ? 'Todas' : value === 'barbershop' ? 'Barbershop' : 'Carwash'}</button>)}
       <input className="touch-input" type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
@@ -57,8 +58,8 @@ export function AgendaView({ appointments, customers, employees, services, onSav
       {filtered.map((item) => <div className="record-row" key={item.id}>
         <div className="record-main"><strong>{item.customer_name}</strong><small>{new Date(item.scheduled_for).toLocaleString('pt-MZ')} · {item.service_name} · {item.employee_name || 'Sem responsável'}</small></div>
         <span className="chip">{item.status}</span>
-        <button className="ghost-button" onClick={() => edit(item)}>Editar</button>
-        {item.status === 'scheduled' && <button className="primary-button" disabled={busy} onClick={() => void start(item.id)}>Iniciar</button>}
+        {canManage && <button className="ghost-button" onClick={() => edit(item)}>Editar</button>}
+        {canManage && item.status === 'scheduled' && <button className="primary-button" disabled={busy} onClick={() => void start(item.id)}>Iniciar</button>}
       </div>)}
       {filtered.length === 0 && <p className="empty-state">Nenhuma marcação encontrada.</p>}
     </div></article>

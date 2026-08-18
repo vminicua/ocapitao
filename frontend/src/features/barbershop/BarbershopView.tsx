@@ -16,6 +16,7 @@ interface BarbershopViewProps {
   products: Product[]
   services: Service[]
   onTransactionComplete: (transaction: Transaction) => Promise<void>
+  canApplyDiscount: boolean
 }
 
 const CARD_TONES = [
@@ -36,6 +37,7 @@ export function BarbershopView({
   products,
   services,
   onTransactionComplete,
+  canApplyDiscount,
 }: BarbershopViewProps) {
   const sm = useSessionManager('barbershop', accessToken)
   const [search, setSearch] = useState('')
@@ -362,6 +364,7 @@ export function BarbershopView({
               max={subtotal}
               value={sm.active.discount || ''}
               placeholder="0"
+              disabled={!canApplyDiscount}
               onChange={(e) => sm.setDiscount(sm.activeId, toNumber(e.target.value))}
               style={{ width: '120px', textAlign: 'right' }}
             />

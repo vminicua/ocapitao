@@ -16,7 +16,7 @@ class CompleteSaleTests(APITestCase):
     def setUp(self):
         permission = Permission.objects.create(module="pos", code="pos.manage", name="Gerir POS")
         role = Role.objects.create(code="cashier-test", name="Cashier Test")
-        role.permissions.add(permission)
+        role.permissions.add(permission, Permission.objects.get(code="sales.cancel"), Permission.objects.get(code="sales.discount"))
         self.user = User.objects.create_user(email="cashier@test.local", password="1122", role=role)
         self.client.force_authenticate(self.user)
         category = ProductCategory.objects.create(name="Bebidas", department=ProductCategory.Department.BAR)
@@ -177,6 +177,21 @@ class CompleteSaleTests(APITestCase):
         self.client.post(f"/api/sales/{created.data['id']}/cancel/", {}, format="json")
         commission.refresh_from_db()
         self.assertEqual(commission.status, Commission.Status.REVERSED)
+
+    def test_pos_operator_without_sensitive_permissions_cannot_discount_or_cancel(self):
+        self.open_cash()
+        restricted_role = Role.objects.create(code="restricted-pos", name="POS restrito")
+        restricted_role.permissions.add(Permission.objects.get(code="pos.manage"))
+        restricted = User.objects.create_user(email="restricted-pos@test.local", password="1122", role=restricted_role)
+        self.client.force_authenticate(restricted)
+        discounted = self.client.post("/api/sales/complete/", self.sale_payload(), format="json")
+        self.assertEqual(discounted.status_code, status.HTTP_400_BAD_REQUEST)
+        payload = self.sale_payload()
+        payload["discount_amount"] = "0.00"
+        created = self.client.post("/api/sales/complete/", payload, format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        cancelled = self.client.post(f"/api/sales/{created.data['id']}/cancel/", {}, format="json")
+        self.assertEqual(cancelled.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_fifth_monthly_cut_is_free_and_cancel_reverses_benefits(self):
         service = Service.objects.create(department="barbershop", category="Cortes", name="Corte", price=Decimal("200"))

@@ -17,6 +17,7 @@ interface CarwashViewProps {
   vehicles: Vehicle[]
   employees: EmployeeRecord[]
   onTransactionComplete: (transaction: Transaction) => Promise<void>
+  canApplyDiscount: boolean
 }
 
 const CARD_TONES = [
@@ -37,6 +38,7 @@ export function CarwashView({
   vehicles,
   employees,
   onTransactionComplete,
+  canApplyDiscount,
 }: CarwashViewProps) {
   const sm = useSessionManager('carwash', accessToken)
   const [search, setSearch] = useState('')
@@ -362,6 +364,7 @@ export function CarwashView({
               max={subtotal}
               value={sm.active.discount || ''}
               placeholder="0"
+              disabled={!canApplyDiscount}
               onChange={(e) => sm.setDiscount(sm.activeId, toNumber(e.target.value))}
               style={{ width: '120px', textAlign: 'right' }}
             />

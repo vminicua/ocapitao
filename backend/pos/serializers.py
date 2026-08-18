@@ -240,6 +240,14 @@ class CompleteSaleSerializer(serializers.Serializer):
     responsible_employee_id = serializers.UUIDField(required=False, allow_null=True)
     items = CompleteSaleItemSerializer(many=True, allow_empty=False)
 
+    def validate(self, attrs):
+        if attrs.get("discount_amount", Decimal("0")) > 0:
+            from config.common.permissions import RoleBasedPermission
+            request = self.context.get("request")
+            if not RoleBasedPermission.user_has_any(request.user if request else None, ["sales.discount"]):
+                raise serializers.ValidationError({"discount_amount": "O seu perfil não pode aplicar descontos manuais."})
+        return attrs
+
     def validate_payment_method(self, value):
         if value == "Crédito":
             return value

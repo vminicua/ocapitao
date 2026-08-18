@@ -61,7 +61,7 @@ class StockMovementViewSet(SoftDeleteModelViewSet):
 
 class InventoryManageViewSet(SoftDeleteModelViewSet):
     permission_classes = [IsAuthenticated, RoleBasedPermission]
-    allowed_permissions = {"list": ["inventory.view", "inventory.manage"], "retrieve": ["inventory.view", "inventory.manage"], "create": ["inventory.manage"], "update": ["inventory.manage"], "partial_update": ["inventory.manage"], "destroy": ["inventory.manage"], "*": ["inventory.manage"]}
+    allowed_permissions = {"list": ["purchases.view", "purchases.manage"], "retrieve": ["purchases.view", "purchases.manage"], "create": ["purchases.manage"], "update": ["purchases.manage"], "partial_update": ["purchases.manage"], "destroy": ["purchases.manage"]}
 
 
 class SupplierViewSet(InventoryManageViewSet):
@@ -87,6 +87,7 @@ class PurchaseOrderItemViewSet(InventoryManageViewSet):
 class PurchaseOrderViewSet(InventoryManageViewSet):
     queryset = PurchaseOrder.objects.select_related("supplier", "location").prefetch_related("items__product").all()
     serializer_class = PurchaseOrderSerializer
+    allowed_permissions = {**InventoryManageViewSet.allowed_permissions, "receive": ["purchases.manage"]}
 
     @action(detail=True, methods=["post"])
     def receive(self, request, pk=None):
@@ -134,11 +135,13 @@ class StockLotViewSet(InventoryManageViewSet):
 class StockCountLineViewSet(InventoryManageViewSet):
     queryset = StockCountLine.objects.select_related("count", "product").all()
     serializer_class = StockCountLineSerializer
+    allowed_permissions = {"list": ["inventory.view", "stock.count"], "retrieve": ["inventory.view", "stock.count"], "create": ["stock.count"], "update": ["stock.count"], "partial_update": ["stock.count"], "destroy": ["stock.count"]}
 
 
 class StockCountViewSet(InventoryManageViewSet):
     queryset = StockCount.objects.select_related("location").prefetch_related("lines__product").all()
     serializer_class = StockCountSerializer
+    allowed_permissions = {"list": ["inventory.view", "stock.count"], "retrieve": ["inventory.view", "stock.count"], "create": ["stock.count"], "update": ["stock.count"], "partial_update": ["stock.count"], "destroy": ["stock.count"], "approve": ["stock.count"]}
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
@@ -164,6 +167,7 @@ class StockCountViewSet(InventoryManageViewSet):
 class StockTransferViewSet(InventoryManageViewSet):
     queryset = StockTransfer.objects.select_related("product", "source", "destination").all()
     serializer_class = StockTransferSerializer
+    allowed_permissions = {"list": ["inventory.view", "stock.transfer"], "retrieve": ["inventory.view", "stock.transfer"], "create": ["stock.transfer"], "update": ["stock.transfer"], "partial_update": ["stock.transfer"], "destroy": ["stock.transfer"]}
 
     def perform_create(self, serializer):
         with transaction.atomic():

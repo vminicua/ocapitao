@@ -36,6 +36,7 @@ interface SettingsViewProps {
   currentUser: AuthUser | null
   canManageSettings: boolean
   canManageUsers: boolean
+  canManageLoyalty: boolean
   onSyncNow: () => void
   onSaveSettings: (payload: Record<string, unknown>) => Promise<unknown>
   onSaveRole: (payload: Record<string, unknown>, roleId?: string) => Promise<unknown>
@@ -292,6 +293,7 @@ export function SettingsView({
   currentUser,
   canManageSettings,
   canManageUsers,
+  canManageLoyalty,
   onSyncNow,
   onSaveSettings,
   onSaveRole,
@@ -389,6 +391,14 @@ export function SettingsView({
   )
   const filteredServices = services.filter((service) => service.department === serviceForm.department)
   const canOperateSecurity = canManageUsers || canManageSettings
+  const permissionCodes = currentUser?.role?.permissions?.map((permission) => permission.code) ?? []
+  const canViewSettings = Boolean(currentUser?.is_superuser || permissionCodes.some((code) => ['settings.view', 'settings.manage'].includes(code)))
+  const canViewUsers = Boolean(currentUser?.is_superuser || permissionCodes.some((code) => ['users.view', 'users.manage'].includes(code)))
+  const canViewLoyalty = Boolean(currentUser?.is_superuser || permissionCodes.some((code) => ['loyalty.view', 'loyalty.adjust', 'promotions.view', 'promotions.manage'].includes(code)))
+
+  useEffect(() => {
+    if (!canViewSettings && !canViewUsers && canViewLoyalty) setActiveTab('loyalty')
+  }, [canViewLoyalty, canViewSettings, canViewUsers])
 
   async function handleSaveSettings() {
     setSavingSettings(true)
@@ -563,25 +573,25 @@ export function SettingsView({
       </div>
 
       <div className="tab-row">
-        <button type="button" className={`chip-button ${activeTab === 'business' ? 'is-selected' : ''}`} onClick={() => setActiveTab('business')}>
+        {canViewSettings && <button type="button" className={`chip-button ${activeTab === 'business' ? 'is-selected' : ''}`} onClick={() => setActiveTab('business')}>
           Negócio
-        </button>
-        <button type="button" className={`chip-button ${activeTab === 'operations' ? 'is-selected' : ''}`} onClick={() => setActiveTab('operations')}>
+        </button>}
+        {canViewSettings && <button type="button" className={`chip-button ${activeTab === 'operations' ? 'is-selected' : ''}`} onClick={() => setActiveTab('operations')}>
           Operação
-        </button>
-        <button type="button" className={`chip-button ${activeTab === 'team' ? 'is-selected' : ''}`} onClick={() => setActiveTab('team')}>
+        </button>}
+        {canViewUsers && <button type="button" className={`chip-button ${activeTab === 'team' ? 'is-selected' : ''}`} onClick={() => setActiveTab('team')}>
           Equipa
-        </button>
-        <button type="button" className={`chip-button ${activeTab === 'services' ? 'is-selected' : ''}`} onClick={() => setActiveTab('services')}>
+        </button>}
+        {canViewSettings && <button type="button" className={`chip-button ${activeTab === 'services' ? 'is-selected' : ''}`} onClick={() => setActiveTab('services')}>
           Serviços
-        </button>
-        <button type="button" className={`chip-button ${activeTab === 'loyalty' ? 'is-selected' : ''}`} onClick={() => setActiveTab('loyalty')}>Fidelização</button>
-        <button type="button" className={`chip-button ${activeTab === 'access' ? 'is-selected' : ''}`} onClick={() => setActiveTab('access')}>
+        </button>}
+        {canViewLoyalty && <button type="button" className={`chip-button ${activeTab === 'loyalty' ? 'is-selected' : ''}`} onClick={() => setActiveTab('loyalty')}>Fidelização</button>}
+        {canViewUsers && <button type="button" className={`chip-button ${activeTab === 'access' ? 'is-selected' : ''}`} onClick={() => setActiveTab('access')}>
           Perfis e acessos
-        </button>
-        <button type="button" className={`chip-button ${activeTab === 'printers' ? 'is-selected' : ''}`} onClick={() => setActiveTab('printers')}>
+        </button>}
+        {canViewSettings && <button type="button" className={`chip-button ${activeTab === 'printers' ? 'is-selected' : ''}`} onClick={() => setActiveTab('printers')}>
           Impressoras
-        </button>
+        </button>}
       </div>
 
       {activeTab === 'business' ? (
@@ -834,7 +844,7 @@ export function SettingsView({
         </div>
       ) : null}
 
-      {activeTab === 'loyalty' ? <LoyaltySettings accessToken={accessToken} services={services} /> : null}
+      {activeTab === 'loyalty' ? <LoyaltySettings accessToken={accessToken} services={services} canManage={canManageLoyalty} /> : null}
 
       {activeTab === 'access' ? (
         <div className="content-grid two-columns">

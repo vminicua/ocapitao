@@ -17,8 +17,11 @@ class StockMovementFlowTests(APITestCase):
             code="inventory.manage",
             name="Gerir stock",
         )
+        purchase_permission = Permission.objects.get(code="purchases.manage")
+        count_permission = Permission.objects.get(code="stock.count")
+        transfer_permission = Permission.objects.get(code="stock.transfer")
         role = Role.objects.create(code="stock-manager", name="Stock Manager")
-        role.permissions.set([permission])
+        role.permissions.set([permission, purchase_permission, count_permission, transfer_permission])
 
         self.user = User.objects.create_user(
             email="stock@ocapitao.local",
@@ -138,3 +141,12 @@ class StockMovementFlowTests(APITestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, Decimal("11"))
         self.assertEqual(StockBalance.objects.get(product=self.product, location=destination).quantity, Decimal("3"))
+
+    def test_inventory_viewer_cannot_create_supplier(self):
+        viewer_permission = Permission.objects.create(module="inventory", code="inventory.view", name="Consultar stock")
+        role = Role.objects.create(code="stock-viewer-test", name="Consulta")
+        role.permissions.add(viewer_permission)
+        viewer = User.objects.create_user(email="stock-viewer@test.local", password="1122", role=role)
+        self.client.force_authenticate(viewer)
+        response = self.client.post("/api/suppliers/", {"name": "Não autorizado"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
