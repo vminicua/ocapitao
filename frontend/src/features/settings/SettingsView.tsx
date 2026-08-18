@@ -8,6 +8,7 @@ import { showErrorAlert, showSuccessToast } from '../../lib/alerts'
 import { formatCurrency } from '../../lib/formatters'
 import type {
   AppSettings,
+  BackupRecord,
   AuthUser,
   EmployeeDepartment,
   PermissionDefinition,
@@ -15,12 +16,15 @@ import type {
   Service,
   ServiceCategory,
   SyncState,
+  SyncQueueRecord,
   UserRecord,
 } from '../../types/models'
 
 type SettingsTab = 'business' | 'operations' | 'team' | 'services' | 'access' | 'printers'
 
 interface SettingsViewProps {
+  backups: BackupRecord[]
+  syncQueue: SyncQueueRecord[]
   settings: AppSettings
   syncState: SyncState
   permissions: PermissionDefinition[]
@@ -38,6 +42,9 @@ interface SettingsViewProps {
   onSaveServiceCategory: (payload: Record<string, unknown>, categoryId?: string) => Promise<unknown>
   onSaveUser: (payload: Record<string, unknown>, userId?: number) => Promise<unknown>
   onDeactivateUser: (userId: number) => Promise<unknown>
+  onCreateBackup: () => Promise<unknown>
+  onRestoreBackup: (file: string) => Promise<unknown>
+  onResolveSync: (id: number, resolution: 'keep_local' | 'use_cloud') => Promise<unknown>
 }
 
 interface SettingsFormState {
@@ -271,6 +278,8 @@ function buildServiceForm(service: Service): ServiceFormState {
 }
 
 export function SettingsView({
+  backups,
+  syncQueue,
   settings,
   syncState,
   permissions,
@@ -288,6 +297,9 @@ export function SettingsView({
   onSaveServiceCategory,
   onSaveUser,
   onDeactivateUser,
+  onCreateBackup,
+  onRestoreBackup,
+  onResolveSync,
 }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('business')
   const [settingsForm, setSettingsForm] = useState<SettingsFormState>(() => buildSettingsForm(settings))
@@ -300,6 +312,22 @@ export function SettingsView({
   const [savingUser, setSavingUser] = useState(false)
   const [savingServiceCategory, setSavingServiceCategory] = useState(false)
   const [savingService, setSavingService] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+
+  async function handleCreateBackup() {
+    setBackupBusy(true)
+    try { await onCreateBackup(); void showSuccessToast('Backup verificado e criado com sucesso.') }
+    catch { void showErrorAlert('Falha no backup', 'Não foi possível criar o backup local.') }
+    finally { setBackupBusy(false) }
+  }
+
+  async function handleRestoreBackup(file: string) {
+    if (!window.confirm(`Restaurar ${file}? Será criado um backup de segurança antes da recuperação.`)) return
+    setBackupBusy(true)
+    try { await onRestoreBackup(file); void showSuccessToast('Backup restaurado. Reinicie a aplicação para carregar os dados recuperados.') }
+    catch { void showErrorAlert('Falha no restauro', 'O ficheiro não passou a validação ou não pôde ser restaurado.') }
+    finally { setBackupBusy(false) }
+  }
 
   useEffect(() => {
     setSettingsForm(buildSettingsForm(settings))
@@ -620,6 +648,8 @@ export function SettingsView({
               <TouchInput label="Pasta de backup" value={settingsForm.backup_folder} onChange={(value) => setSettingsForm((current) => ({ ...current, backup_folder: value }))} />
             </div>
             <TouchTextarea label="Horário de funcionamento" value={settingsForm.business_hours} onChange={(value) => setSettingsForm((current) => ({ ...current, business_hours: value }))} rows={3} />
+            <div className="panel-head"><h4>Backups locais</h4><button className="primary-button" disabled={backupBusy || !canManageSettings} onClick={() => void handleCreateBackup()}>Criar backup agora</button></div>
+            <div className="record-list">{backups.slice(0, 5).map(backup => <div className="record-row record-row--static" key={backup.file}><div className="record-main"><strong>{backup.file}</strong><small>{new Date(backup.created_at).toLocaleString('pt-MZ')} · {backup.reason}</small></div><button className="ghost-button" disabled={backupBusy || !canManageSettings} onClick={() => void handleRestoreBackup(backup.file)}>Restaurar</button></div>)}{backups.length === 0 && <p className="empty-state">Ainda não existem backups.</p>}</div>
           </article>
 
           <article className="panel">
@@ -647,6 +677,10 @@ export function SettingsView({
                 {savingSettings ? 'A guardar...' : 'Guardar configurações'}
               </button>
             </div>
+            {syncQueue.some(item => item.status === 'conflict' || item.status === 'failed') && <div className="record-list">
+              <h4>Conflitos e falhas de sincronização</h4>
+              {syncQueue.filter(item => item.status === 'conflict' || item.status === 'failed').map(item => <div className="record-row record-row--static" key={item.id}><div className="record-main"><strong>{item.model_label}</strong><small>{item.last_error || `Falhou após ${item.attempts} tentativas`}</small></div><button className="ghost-button" onClick={() => void onResolveSync(item.id, 'use_cloud')}>Usar cloud</button><button className="primary-button" onClick={() => void onResolveSync(item.id, 'keep_local')}>Manter local</button></div>)}
+            </div>}
           </article>
         </div>
       ) : null}

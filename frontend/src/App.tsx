@@ -19,6 +19,7 @@ import { showErrorAlert, showSuccessToast, showWarningToast } from './lib/alerts
 import {
   connectCloud,
   createAppointment,
+  createBackup,
   cancelSale,
   completeSale,
   closeCashSession,
@@ -38,6 +39,7 @@ import {
   getCurrentUser,
   getCurrentCashSession,
   getCommissions,
+  getBackups,
   getCustomers,
   getDashboardSummary,
   getEmployees,
@@ -52,6 +54,7 @@ import {
   getSettings,
   getStockMovements,
   getSyncStatus,
+  getSyncQueue,
   getUsers,
   getVehicles,
   signIn,
@@ -59,6 +62,8 @@ import {
   receiveSalePayment,
   triggerSyncNow,
   startAppointment,
+  restoreBackup,
+  resolveSyncConflict,
   updateCustomer,
   updateAppointment,
   updateProduct,
@@ -87,6 +92,8 @@ import type {
   CashSessionRecord,
   EmployeeRecord,
   CommissionRecord,
+  BackupRecord,
+  SyncQueueRecord,
   Service,
   ServiceCategory,
   StockMovement,
@@ -116,6 +123,8 @@ interface AppData {
   cashSession: CashSessionRecord | null
   employees: EmployeeRecord[]
   commissions: CommissionRecord[]
+  backups: BackupRecord[]
+  syncQueue: SyncQueueRecord[]
 }
 
 const offlineSyncState: SyncState = { online: false, pending_count: 0, mode: 'offline' }
@@ -140,6 +149,8 @@ const emptyData: AppData = {
   cashSession: null,
   employees: [],
   commissions: [],
+  backups: [],
+  syncQueue: [],
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -303,6 +314,8 @@ function App() {
       cashSessionResult,
       employeesResult,
       commissionsResult,
+      backupsResult,
+      syncQueueResult,
     ] = await Promise.allSettled([
       getCurrentUser(accessToken),
       getDashboardSummary(accessToken),
@@ -323,6 +336,8 @@ function App() {
       getCurrentCashSession(accessToken),
       getEmployees(accessToken),
       getCommissions(accessToken),
+      getBackups(accessToken),
+      getSyncQueue(accessToken),
     ])
 
     const failures = [
@@ -345,6 +360,8 @@ function App() {
       cashSessionResult,
       employeesResult,
       commissionsResult,
+      backupsResult,
+      syncQueueResult,
     ].filter((item) => item.status === 'rejected').length
 
     setAppData({
@@ -366,6 +383,8 @@ function App() {
       cashSession: cashSessionResult.status === 'fulfilled' ? cashSessionResult.value : null,
       employees: employeesResult.status === 'fulfilled' ? employeesResult.value : [],
       commissions: commissionsResult.status === 'fulfilled' ? commissionsResult.value : [],
+      backups: backupsResult.status === 'fulfilled' ? backupsResult.value : [],
+      syncQueue: syncQueueResult.status === 'fulfilled' ? syncQueueResult.value : [],
     })
     setTransactions(salesResult.status === 'fulfilled' ? salesResult.value.map(saleToTransaction) : [])
 
@@ -743,6 +762,8 @@ function App() {
       case 'settings':
         return (
           <SettingsView
+            backups={appData.backups}
+            syncQueue={appData.syncQueue}
             currentUser={session.user}
             permissions={appData.permissions}
             roles={appData.roles}
@@ -754,6 +775,9 @@ function App() {
             canManageSettings={canManageSettings}
             canManageUsers={canManageUsers}
             onDeactivateUser={(userId) => runWithReload((accessToken) => deactivateUser(accessToken, userId))}
+            onCreateBackup={() => runWithReload((token) => createBackup(token))}
+            onRestoreBackup={(file) => runWithReload((token) => restoreBackup(token, file))}
+            onResolveSync={(id, resolution) => runWithReload((token) => resolveSyncConflict(token, id, resolution))}
             onSaveRole={(payload, roleId) =>
               runWithReload((accessToken) =>
                 roleId ? updateRole(accessToken, roleId, payload) : createRole(accessToken, payload),

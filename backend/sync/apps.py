@@ -36,4 +36,23 @@ class SyncConfig(AppConfig):
             from config.cloud_manager import CloudManager
             CloudManager.get().try_auto_connect()
 
+            from .backup import BackupService
+            from .services import SyncService
+            from settings_app.models import Settings
+            existing_backups = BackupService().list()
+            last_backup_date = existing_backups[0].get("created_at", "")[:10] if existing_backups else None
+            while True:
+                try:
+                    config = Settings.objects.first()
+                    interval = max(30, config.sync_interval_seconds if config else 300)
+                    if config and config.auto_sync_enabled:
+                        SyncService().sync_pending()
+                    today = time.strftime("%Y-%m-%d")
+                    if today != last_backup_date:
+                        BackupService().create(reason="daily")
+                        last_backup_date = today
+                except Exception:
+                    interval = 300
+                time.sleep(interval)
+
         threading.Thread(target=delayed_auto_connect, daemon=True, name="cloud-auto-connect").start()

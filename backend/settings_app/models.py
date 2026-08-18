@@ -26,7 +26,6 @@ class Settings(SyncableModel):
         blank=True,
         default="ssh -L 5523:127.0.0.1:3306 salacsth@premium342.web-hosting.com -p 21098 -N",
     )
-    ssh_tunnel_password = models.CharField(max_length=255, blank=True, default="")
     sync_interval_seconds = models.PositiveIntegerField(default=300)
     auto_sync_enabled = models.BooleanField(default=True)
     enable_barbershop_module = models.BooleanField(default=True)

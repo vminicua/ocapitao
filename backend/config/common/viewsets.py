@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import viewsets
 
 
@@ -7,7 +8,13 @@ class SoftDeleteModelViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         model = queryset.model
         if hasattr(model, "deleted_at"):
-            return queryset.filter(deleted_at__isnull=True)
+            if self.request.query_params.get("include_deleted") != "true":
+                queryset = queryset.filter(deleted_at__isnull=True)
+        sync_since = self.request.query_params.get("sync_since")
+        if sync_since and hasattr(model, "updated_at"):
+            parsed = parse_datetime(sync_since)
+            if parsed:
+                queryset = queryset.filter(updated_at__gt=parsed)
         return queryset
 
     def perform_destroy(self, instance):

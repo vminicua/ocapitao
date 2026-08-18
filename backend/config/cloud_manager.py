@@ -1,4 +1,3 @@
-import json
 import os
 import socket
 import subprocess
@@ -39,15 +38,11 @@ class CloudManager:
 
     def _save_credentials(self, ssh_password: str):
         try:
-            from settings_app.models import Settings
-            obj = Settings.objects.first()
-            if obj:
-                Settings.objects.filter(pk=obj.pk).update(ssh_tunnel_password=ssh_password)
-            else:
-                Settings.objects.create(ssh_tunnel_password=ssh_password)
-        except Exception:
-            # Fallback to file if DB not ready
-            self._save_credentials_file(ssh_password)
+            import keyring
+            from django.conf import settings
+            keyring.set_password("O Capitao SSH", f"{settings.SSH_USER}@{settings.SSH_HOST}", ssh_password)
+        except Exception as exc:
+            raise RuntimeError("O Windows não permitiu guardar a credencial SSH com segurança.") from exc
 
     def _load_credentials(self) -> str | None:
         from django.conf import settings
@@ -57,42 +52,18 @@ class CloudManager:
             return env_password
 
         try:
-            from settings_app.models import Settings
-            obj = Settings.objects.first()
-            if obj and obj.ssh_tunnel_password:
-                return obj.ssh_tunnel_password
+            import keyring
+            return keyring.get_password("O Capitao SSH", f"{settings.SSH_USER}@{settings.SSH_HOST}")
         except Exception:
-            pass
-        return self._load_credentials_file()
+            return None
 
     def clear_credentials(self):
         try:
-            from settings_app.models import Settings
-            Settings.objects.update(ssh_tunnel_password="")
+            import keyring
+            from django.conf import settings
+            keyring.delete_password("O Capitao SSH", f"{settings.SSH_USER}@{settings.SSH_HOST}")
         except Exception:
             pass
-        # Also clear file fallback
-        path = self._get_config_path()
-        if path.exists():
-            path.unlink()
-
-    def _get_config_path(self) -> Path:
-        from django.conf import settings
-        return settings.ROOT_DIR / "data" / "cloud_config.json"
-
-    def _save_credentials_file(self, ssh_password: str):
-        path = self._get_config_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"ssh_password": ssh_password}), encoding="utf-8")
-
-    def _load_credentials_file(self) -> str | None:
-        path = self._get_config_path()
-        if not path.exists():
-            return None
-        try:
-            return json.loads(path.read_text(encoding="utf-8")).get("ssh_password")
-        except Exception:
-            return None
 
     def connect(self, ssh_password: str) -> tuple[bool, str]:
         with self._lock:
@@ -134,6 +105,11 @@ class CloudManager:
         self._close_tunnel()
 
         client = paramiko.SSHClient()
+        known_hosts = Path(__file__).resolve().parents[2] / "data" / "known_hosts"
+        known_hosts.parent.mkdir(parents=True, exist_ok=True)
+        known_hosts.touch(exist_ok=True)
+        client.load_host_keys(str(known_hosts))
+        # Trust on first use; subsequent connections reject a changed server key.
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(host, port=port, username=user, password=password, timeout=20)
 

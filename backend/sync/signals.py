@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
+from config.common.models import SyncStatus
 
 from accounts.models import Employee, Permission, Role
 from bar.models import Product, ProductCategory
@@ -14,6 +15,7 @@ from settings_app.models import Settings
 
 from .models import SyncQueue
 from .utils import serialize_instance
+from .state import sync_signals_suppressed
 
 
 SYNC_MODELS = (
@@ -41,7 +43,7 @@ SYNC_MODELS = (
 
 
 def _queue_instance(instance, created: bool | None = None):
-    if not settings.SYNC_ENABLED:
+    if not settings.SYNC_ENABLED or sync_signals_suppressed():
         return
 
     action = SyncQueue.Action.UPDATE
@@ -50,12 +52,30 @@ def _queue_instance(instance, created: bool | None = None):
     elif getattr(instance, "deleted_at", None):
         action = SyncQueue.Action.DELETE
 
-    SyncQueue.objects.create(
+    existing = SyncQueue.objects.filter(
         model_label=instance._meta.label,
         object_id=instance.pk,
-        action=action,
-        payload=serialize_instance(instance),
-    )
+        status__in=[SyncQueue.Status.PENDING, SyncQueue.Status.CONFLICT, SyncQueue.Status.FAILED],
+    ).order_by("created_at").first()
+    if existing:
+        if existing.action == SyncQueue.Action.CREATE and action == SyncQueue.Action.UPDATE:
+            action = SyncQueue.Action.CREATE
+        existing.action = action
+        existing.payload = serialize_instance(instance)
+        if existing.status == SyncQueue.Status.FAILED:
+            existing.status = SyncQueue.Status.PENDING
+            existing.attempts = 0
+        existing.next_attempt_at = None
+        if existing.status != SyncQueue.Status.CONFLICT:
+            existing.last_error = ""
+        existing.save(update_fields=["action", "payload", "status", "attempts", "next_attempt_at", "last_error", "updated_at"])
+    else:
+        SyncQueue.objects.create(
+            model_label=instance._meta.label,
+            object_id=instance.pk,
+            action=action,
+            payload=serialize_instance(instance),
+        )
 
 
 for model in SYNC_MODELS:

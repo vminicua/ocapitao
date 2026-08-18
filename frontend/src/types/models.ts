@@ -372,6 +372,23 @@ export interface CommissionRecord {
   created_at: string
 }
 
+export interface BackupRecord {
+  file: string
+  sha256: string
+  created_at: string
+  reason: string
+}
+
+export interface SyncQueueRecord {
+  id: number
+  model_label: string
+  object_id: string
+  action: string
+  status: 'pending' | 'synced' | 'conflict' | 'failed'
+  attempts: number
+  last_error?: string
+}
+
 export interface OperationalSessionRecord {
   id: string
   department: 'bar' | 'barbershop' | 'carwash'

@@ -391,13 +391,15 @@ class CompleteSaleSerializer(serializers.Serializer):
 
 
 class CommissionSerializer(SyncableModelSerializer):
+    sale_id = serializers.PrimaryKeyRelatedField(queryset=Sale.objects.all(), source="sale", write_only=True)
+    employee_id = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all(), source="employee", write_only=True)
     employee_name = serializers.CharField(source="employee.user.get_full_name", read_only=True)
     sale_label = serializers.CharField(source="sale.label", read_only=True)
 
     class Meta:
         model = Commission
         fields = "__all__"
-        read_only_fields = ["sale", "employee", "basis_amount", "rate", "amount"]
+        read_only_fields = ["sale", "employee"]
 
 
 class SaleItemSerializer(SyncableModelSerializer):

@@ -133,4 +133,11 @@ npm run tauri:build
 
 - O frontend nunca escreve diretamente no MySQL remoto.
 - O modo offline depende do backend local a correr com SQLite.
+- A sincronização é bidirecional e incremental. Alterações concorrentes ficam na fila como conflito e devem ser resolvidas escolhendo a versão local ou cloud.
+- A fila compacta alterações repetidas, tenta novamente com backoff e bloqueia uma falha permanente depois de oito tentativas.
+- Com `auto_sync_enabled`, o backend sincroniza no intervalo configurado sem depender do frontend estar num módulo específico.
+- Backups SQLite com checksum são criados diariamente em `data/backups` ou na pasta configurada. Também podem ser criados e restaurados em Configurações → Operação.
+- Antes de restaurar, a aplicação cria automaticamente um backup de segurança; depois do restauro, reinicie a aplicação.
+- Senhas SSH introduzidas pela interface são guardadas no Cofre de Credenciais do Windows. `SSH_PASSWORD` no `.env` continua disponível como opção explícita para arranque automático.
+- A chave do servidor SSH usa trust-on-first-use em `data/known_hosts`; alterações posteriores da chave são recusadas.
 - Nesta máquina, no momento desta entrega, `cargo` e `rustc` não estavam instalados; por isso a shell Tauri foi preparada mas não validada em execução nativa.

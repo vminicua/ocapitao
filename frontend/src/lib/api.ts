@@ -14,6 +14,8 @@ import type {
   SaleRecord,
   CashSessionRecord,
   CommissionRecord,
+  BackupRecord,
+  SyncQueueRecord,
   OperationalSessionRecord,
   Service,
   ServiceCategory,
@@ -154,6 +156,26 @@ export function getSales(accessToken: string) {
 
 export function getCommissions(accessToken: string) {
   return requestList<CommissionRecord>('/commissions/', accessToken)
+}
+
+export function getBackups(accessToken: string) {
+  return request<{ results: BackupRecord[] }>('/backups/', undefined, accessToken).then(payload => payload.results)
+}
+
+export function createBackup(accessToken: string) {
+  return createRecord<BackupRecord>('/backups/', {}, accessToken)
+}
+
+export function restoreBackup(accessToken: string, file: string) {
+  return createRecord<{ restored: string; safety_backup: string }>('/backups/restore/', { file }, accessToken)
+}
+
+export function getSyncQueue(accessToken: string) {
+  return requestList<SyncQueueRecord>('/sync-queue/', accessToken)
+}
+
+export function resolveSyncConflict(accessToken: string, queueId: number, resolution: 'keep_local' | 'use_cloud') {
+  return createRecord<{ ok: boolean }>(`/sync-queue/${queueId}/resolve/`, { resolution }, accessToken)
 }
 
 export function completeSale(accessToken: string, payload: JsonRecord) {
